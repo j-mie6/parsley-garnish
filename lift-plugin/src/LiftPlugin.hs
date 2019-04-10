@@ -21,7 +21,6 @@ where
 import Data.Maybe          (mapMaybe)
 import GHC.TcPluginM.Extra (lookupModule, lookupName)
 
-
 -- GHC API
 import FastString (fsLit)
 import Module     (mkModuleName)
@@ -37,18 +36,14 @@ import Class
 import MkCore
 import CoreSyn
 import Bag
-import MonadUtils
 import TcErrors
 import Literal
 import PrelNames
 import HsDumpAst
 import qualified Unique as GHC
 import qualified THNames as GHC
-
 import qualified IdiomsPlugin as Idioms
-
 import Panic
-
 
 -- ghc
 import qualified Desugar as GHC
@@ -63,18 +58,12 @@ import qualified TysPrim as GHC
 
 import Control.Monad.IO.Class ( liftIO )
 import Control.Monad
-
 import Data.Generics ( everywhereM,  mkM, listify, everywhere, mkT
                      , everywhereBut, mkQ )
 import Data.List
-
 import GHC.Generics
-
 import Data.Function
-
-
 import Language.Haskell.TH.Syntax (Lift(..))
-
 import Data.IORef
 import System.IO.Unsafe
 
@@ -90,7 +79,6 @@ getError :: Int -> IO (TcM ())
 getError k = (!! k) . snd <$> readIORef ioRef
 
 -- Library
-
 class Pure r where
   lift' :: Lift a => a -> r a
 
@@ -102,12 +90,9 @@ class (Pure r) => Syntax r where
   _let :: r a -> (r a -> r b) -> r b
   _ap :: r (a -> b) -> r a -> r b
 
-
   -- Case overloading
   _uncons ::  r [a] -> r res -> (r a -> r [a] -> r res) -> r res
   _elim_prod :: r (a, b) -> (r a -> r b -> r x) -> r x
-
-
 
 overload :: Syntax r => a -> r a
 overload = undefined
@@ -131,7 +116,6 @@ namesString =
     , overloadName = "overload"
     }
 
-
 -- Maps a representative name to the ordering and constructors we expect
 -- with their arity
 caseTable :: GHC.NameEnv CaseRow
@@ -153,12 +137,7 @@ caseTableInfo =
   [ mkCaseRow unconsName [(GHC.consDataConName, 2), (GHC.nilDataConName, 0)]
   , mkCaseRow elimProdName [(tuple2Name, 2)] ]
 
-
-
-
-
 -- Plugin definitions
-
 plugin :: Plugin
 plugin = defaultPlugin { parsedResultAction = parsedResultAction (Idioms.plugin)
                        , renamedResultAction = overloadedSyntax
@@ -172,7 +151,6 @@ liftPlugin =
            , tcPluginStop  = const (return ())
            }
 
-
 lookupLiftTyCon :: TcPluginM TyCon
 lookupLiftTyCon = do
     md      <- lookupModule liftModule liftPackage
@@ -182,7 +160,6 @@ lookupLiftTyCon = do
     liftModule  = mkModuleName "Language.Haskell.TH.Syntax"
     liftPackage = fsLit "template-haskell"
 
-
 -- This plugin solves all instances of (Lift (a -> b)) with a dummy value.
 solveLift :: TyCon -- ^ Lift's TyCon
          -> [Ct]  -- ^ [G]iven constraints
@@ -191,11 +168,10 @@ solveLift :: TyCon -- ^ Lift's TyCon
          -> TcPluginM TcPluginResult
 solveLift _     _ _ []      = return (TcPluginOk [] [])
 solveLift liftTc gs ds wanteds =
-  pprTrace "solveGCD" (ppr gs $$ ppr ds $$ ppr wanteds) $ do
-    res <- mapM (\c -> (, c) <$> evMagic c) solved
-    return $! case failed of
-      [] -> TcPluginOk res []
-      f  -> TcPluginContradiction f
+  do res <- mapM (\c -> (, c) <$> evMagic c) solved
+     return $! case failed of
+       [] -> TcPluginOk res []
+       f  -> TcPluginContradiction f
   where
     liftWanteds :: [Ct]
     liftWanteds = mapMaybe (toLiftCt liftTc) wanteds
@@ -207,8 +183,7 @@ toLiftCt :: TyCon -> Ct -> Maybe Ct
 toLiftCt liftTc ct =
   case GHC.classifyPredType $ ctEvPred $ ctEvidence ct of
     GHC.ClassPred tc tys
-     | pprTrace "classPred" (ppr (classTyCon tc) $$ ppr liftTc $$ ppr (classTyCon tc == liftTc)) True
-     , classTyCon tc == liftTc
+     | classTyCon tc == liftTc
      , [ty] <- tys
      , GHC.isFunTy ty
       -> Just ct
@@ -221,7 +196,6 @@ addErrTc :: TcM () -> TcPluginM Int
 addErrTc err = unsafeTcPluginTcM (liftIO (addError err))
 getErrTc :: Int -> TcM ()
 getErrTc k = join (liftIO (getError k))
-
 
 -- | TODO: Check here for (->) instance
 evMagic :: Ct -> TcPluginM EvTerm
@@ -258,7 +232,6 @@ pattern FakeExpr ty k <- App (App (Var (is_fake_id -> True)) (Type ty)) (Lit (Li
 
 -----------------------------------------------------------------------------
 -- The source plugin which fills in the dictionaries magically.
-
 lookupIds :: GHC.Module -> Names String -> TcM (Names GHC.Id)
 lookupIds pm = traverse (\s -> GHC.lookupId =<< GHC.lookupOrig pm (GHC.mkVarOcc s))
 
@@ -269,8 +242,6 @@ replaceLiftDicts :: [GHC.CommandLineOption] -> GHC.ModSummary -> TcGblEnv -> TcM
 replaceLiftDicts _opts _sum tc_env = do
   hscEnv <- GHC.getTopEnv
   v <- liftIO (readIORef ioRef)
-  pprTrace "ioRef" (ppr (length v)) (return ())
-  --getErrTc 0
 
   GHC.Found _ pluginModule <-
     liftIO
@@ -336,21 +307,18 @@ repair expr e = do
   let e_ty = GHC.exprType e
       (ty_con, tys) = GHC.splitTyConApp e_ty
       res = ty_con `GHC.hasKey` GHC.liftClassKey
-  pprTrace "repair" (ppr ty_con $$ ppr tys $$ ppr res) $
-    if (ty_con `GHC.hasKey` GHC.liftClassKey)
-        && GHC.isFunTy (head tys)
-      then do
-        mres <- checkLiftable expr
-        case mres of
-          Just evidence -> return $ mkLiftDictionary (tyConSingleDataCon ty_con) e_ty evidence
-          Nothing -> do
-            makeError expr
-            -- Return e to keep going
-            return e
-            --GHC.panicDoc "skipping" (ppr expr $$ showAstData BlankSrcSpan expr)
-      else
-        pprTrace "skipping1" (ppr expr) $
-        return e
+  if (ty_con `GHC.hasKey` GHC.liftClassKey)
+      && GHC.isFunTy (head tys)
+    then do
+      mres <- checkLiftable expr
+      case mres of
+        Just evidence -> return $ mkLiftDictionary (tyConSingleDataCon ty_con) e_ty evidence
+        Nothing -> do
+          makeError expr
+          -- Return e to keep going
+          return e
+          --GHC.panicDoc "skipping" (ppr expr $$ showAstData BlankSrcSpan expr)
+    else return e
 
 makeError :: Expr.LHsExpr GHC.GhcTc -> GHC.TcM ()
 makeError (GHC.L l e) =
@@ -360,9 +328,6 @@ makeError (GHC.L l e) =
   where
     msg = text "Unable to magically lift the argument."
           <+> text "It probably isn't statically known."
-
-
-
 
 {-
   mb_local_use <- GHC.getStageAndBindLevel (GHC.idName v)
@@ -413,10 +378,6 @@ checkUsages (bagToList -> bs) binds = do
       all_vars (Var _) = True
       all_vars _ = False
       usages = map (\(Var v) -> v) (listify all_vars binds)
-  pprTrace "landmines" (ppr landmines) (return ())
-  pprTrace "landmines'" (ppr landmines') (return ())
-  pprTrace "usages" (ppr usages) (return ())
-  pprTrace "dicts" (ppr bs) (return ())
   mapM_ (checkMine usages) (landmines ++ landmines')
 
 -- Check whether a mine appears in the program.
@@ -499,22 +460,14 @@ check_pure Names{..} (GHC.L _ e) = go e
 overloadExpr :: Names ExprWithName -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
 overloadExpr names@Names{..} le@(GHC.L l e) = go e
   where
-    go (Expr.HsIf _ext _ p te fe) =
-      pprTrace "Replacing if" (ppr e)
-       $ foldl' GHC.mkHsApp (mkExpr ifName) [p, te, fe]
-    go (Expr.HsApp _exp e1 e2) =
-      pprTrace "Replacing app" (ppr e)
-       $ foldl' GHC.mkHsApp (mkExpr apName) [e1, e2]
-    go (Expr.HsLam {}) =
-      pprTrace "Replacing lam" (ppr e)
-       $ GHC.mkHsApp (mkExpr lamName) le
+    go (Expr.HsIf _ext _ p te fe) = foldl' GHC.mkHsApp (mkExpr ifName) [p, te, fe]
+    go (Expr.HsApp _exp e1 e2) = foldl' GHC.mkHsApp (mkExpr apName) [e1, e2]
+    go (Expr.HsLam {}) = GHC.mkHsApp (mkExpr lamName) le
     go (Expr.HsLet _ binds let_rhs) =
       let (binder, rhs) = extractBindInfo names binds
           pats = [GHC.noLoc $ GHC.VarPat GHC.noExt binder]
           body_lam = mkHsLam pats let_rhs
-      in
-        pprTrace "Replacing let" (ppr e $$ ppr rhs $$ ppr body_lam )
-          $ foldl' GHC.mkHsApp (mkExpr letName) [rhs, body_lam]
+      in foldl' GHC.mkHsApp (mkExpr letName) [rhs, body_lam]
 
     go (Expr.HsCase _ext scrut mg) =
       let res = caseDataCon names scrut mg
@@ -625,13 +578,6 @@ checkAndBuild con (p:ps) (s:ss) = do
      | length pats /= arity -> Left "Arity does not patch"
      | otherwise -> Right (GHC.mkHsApp res (mkHsLamGRHS pats rhs))
 
-
-
-
-
-
-
-
 -- Extract, binders, con name and rhs
 extractConDetails :: Expr.Match GHC.GhcRn body
                   -> Either String ([GHC.LPat GHC.GhcRn], GHC.Name, Expr.GRHSs GHC.GhcRn body)
@@ -650,4 +596,3 @@ extractFromPat (GHC.L _l p) =
     GHC.TuplePat _ [a, b] GHC.Boxed ->
       Right ([a, b], tuple2Name)
     _ -> Left "Complex pattern"
-
