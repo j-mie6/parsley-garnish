@@ -25,7 +25,7 @@ import GHC.TcPluginM.Extra (lookupModule, lookupName)
 import FastString (fsLit)
 import Module     (mkModuleName)
 import OccName    (mkTcOcc)
-import Plugins    (Plugin (..), defaultPlugin)
+import Plugins    (Plugin (..), defaultPlugin, purePlugin)
 import TcEvidence
 import TcPluginM  (TcPluginM, tcLookupTyCon)
 import TcRnTypes
@@ -142,7 +142,8 @@ plugin :: Plugin
 plugin = defaultPlugin { parsedResultAction = parsedResultAction (Idioms.plugin)
                        , renamedResultAction = overloadedSyntax
                        , tcPlugin = const (Just liftPlugin)
-                       , typeCheckResultAction = replaceLiftDicts }
+                       , typeCheckResultAction = replaceLiftDicts
+                       , pluginRecompile = purePlugin }
 
 liftPlugin :: TcPlugin
 liftPlugin =
