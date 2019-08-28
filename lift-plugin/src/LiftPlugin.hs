@@ -168,7 +168,7 @@ solveLift :: TyCon -- ^ Lift's TyCon
          -> [Ct]  -- ^ [W]anted constraints
          -> TcPluginM TcPluginResult
 solveLift _     _ _ []      = return (TcPluginOk [] [])
-solveLift liftTc gs ds wanteds =
+solveLift liftTc {-gs ds-} _ _ wanteds =
   do res <- mapM (\c -> (, c) <$> evMagic c) solved
      return $! case failed of
        [] -> TcPluginOk res []
@@ -218,6 +218,7 @@ fakeId = GHC.mkVanillaGlobalWithInfo fakeIdName ty info
     info = GHC.noCafIdInfo
     ty = GHC.mkSpecForAllTys [GHC.alphaTyVar] (GHC.mkFunTy GHC.intTy GHC.alphaTy)
 
+fake_id :: GHC.Id
 fake_id = fakeId
 
 is_fake_id :: GHC.Id -> Bool
@@ -242,7 +243,7 @@ lookupNames pm = traverse (\s -> GHC.lookupOrig pm (GHC.mkVarOcc s))
 replaceLiftDicts :: [GHC.CommandLineOption] -> GHC.ModSummary -> TcGblEnv -> TcM TcGblEnv
 replaceLiftDicts _opts _sum tc_env = do
   hscEnv <- GHC.getTopEnv
-  v <- liftIO (readIORef ioRef)
+  {-v <- liftIO (readIORef ioRef)-}
 
   GHC.Found _ pluginModule <-
     liftIO
@@ -307,7 +308,7 @@ repair :: Expr.LHsExpr GHC.GhcTc -> GHC.EvExpr -> GHC.TcM (GHC.EvExpr)
 repair expr e = do
   let e_ty = GHC.exprType e
       (ty_con, tys) = GHC.splitTyConApp e_ty
-      res = ty_con `GHC.hasKey` GHC.liftClassKey
+      --res = ty_con `GHC.hasKey` GHC.liftClassKey
   if (ty_con `GHC.hasKey` GHC.liftClassKey)
       && GHC.isFunTy (head tys)
     then do
