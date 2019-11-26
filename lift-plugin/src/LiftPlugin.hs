@@ -106,7 +106,7 @@ data Names a = Names
 namesString :: Names String
 namesString =
   Names
-    { pureName = "lift'"
+    { pureName = "code"
     , ifName = "_if"
     , unconsName = "_uncons"
     , lamName = "_lam"
