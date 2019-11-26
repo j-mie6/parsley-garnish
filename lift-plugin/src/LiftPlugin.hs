@@ -79,11 +79,11 @@ getError :: Int -> IO (TcM ())
 getError k = (!! k) . snd <$> readIORef ioRef
 
 -- Library
-class Pure r where
-  lift' :: Lift a => a -> r a
+class Liftable r where
+  code :: Lift a => a -> r a
 
 -- Syntax we can overload
-class (Pure r) => Syntax r where
+class Liftable r => Syntax r where
   -- Simple overloading
   _if :: r Bool -> r a -> r a -> r a
   _lam :: (r a -> r b) -> r (a -> b)
