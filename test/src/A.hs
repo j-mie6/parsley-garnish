@@ -15,11 +15,11 @@ newtype Code a = Code (Q (TExp a))
 
 runCode (Code a) = a
 
-instance Pure Code where
-  lift' = Code . unsafeTExpCoerce . lift
+instance LiftTo Code where
+  code = Code . unsafeTExpCoerce . lift
 
-instance Pure Identity where
-  lift' = Identity
+instance LiftTo Identity where
+  code = Identity
 
 
 foo 'a' = 'a'
@@ -27,10 +27,10 @@ foo 'a' = 'a'
 foo1 x = x
 
 test1 :: Code String
-test1 = lift' "1"
+test1 = code "1"
 
-test2 :: Pure p => p (Char -> Char)
-test2 = lift' foo
+test2 :: LiftTo r => r (Char -> Char)
+test2 = code foo
 
 test3 :: Code (Char -> Char)
 test3 = test2
@@ -38,11 +38,11 @@ test3 = test2
 test4 :: Identity (Char -> Char)
 test4 = test2
 
-test5 :: Pure p => p (a -> a)
-test5 = lift' foo1
+test5 :: LiftTo r => r (a -> a)
+test5 = code foo1
 
-test7 :: Pure p => p (a -> Maybe a)
-test7 = lift' Just
+test7 :: LiftTo r => r (a -> Maybe a)
+test7 = code Just
 
 {-
 - - These should all fail
@@ -77,13 +77,13 @@ test_foo1 = [|| foo1 ||]
 --test3 = pure foo1
 
 ifTest :: Syntax r => r Bool
-ifTest = overload $ if (lift' True) then (lift' False) else (lift' True)
+ifTest = overload $ if (code True) then (code False) else (code True)
 
 appTest :: Syntax r => r Bool
-appTest = overload $ (lift' const) (lift' True) (lift' False)
+appTest = overload $ (code const) (code True) (code False)
 
 pureTest :: Syntax r => r (Int)
-pureTest = overload $ lift' (id 5)
+pureTest = overload $ code (id 5)
 
 lamTest :: Syntax r => r (a -> a)
 lamTest = overload $ \a -> a
@@ -92,18 +92,18 @@ lamTest = overload $ \a -> a
 -- This is a bit trickier as can't easier make a lambda as for a normal
 -- FunBind
 letTest2 :: Syntax r => r Bool
-letTest2 = overload $ let t = lift' True
+letTest2 = overload $ let t = code True
                      in t
 
 -- Test for fun bind
 letTest :: Syntax r => r Bool
 letTest = overload $ let t x = x
-                     in t (lift' True)
+                     in t (code True)
 
 caseTest :: (Syntax r) => r [a] -> r Bool
 caseTest xs = overload $ case xs of
-                          [] -> (lift' False)
-                          (_:_) -> (lift' True)
+                          [] -> (code False)
+                          (_:_) -> (code True)
 
 caseProdTest :: (Syntax r) => r (a, b) -> r a
 caseProdTest ab = overload $ case ab of
@@ -111,28 +111,28 @@ caseProdTest ab = overload $ case ab of
 
 power :: Syntax r => Int -> r (Int -> Int)
 power n = let r = power (n - 1)
-          in overload $ \k -> if (lift' (==)) (lift' n) (lift' 0)
-                              then lift' 1
-                              else (lift' (*)) k (r k)
+          in overload $ \k -> if (code (==)) (code n) (code 0)
+                              then code 1
+                              else (code (*)) k (r k)
 
 staticPower :: Syntax r => r (Int -> Int -> Int)
 staticPower = overload (\n -> \k ->
-                          if (lift' (==)) n (lift' 0)
-                                  then lift' 1
-                                  else (lift' (*)) k (staticPower ((lift' (-)) n (lift' 1))  k))
+                          if (code (==)) n (code 0)
+                                  then code 1
+                                  else (code (*)) k (staticPower ((code (-)) n (code 1))  k))
 
 (<*>) :: Syntax r => r (a -> b) -> r a -> r b
 (<*>) = _ap
 
 staticPowerId :: Syntax r => r (Int -> Int -> Int)
 staticPowerId = overload (\n -> \k ->
-                          if ([ n == lift' 0 ])
-                                then lift' 1
+                          if ([ n == code 0 ])
+                                then code 1
                                 else
-                                  let sp = staticPowerId <*> ([ n - (lift' 1) ]) <*> k
+                                  let sp = staticPowerId <*> ([ n - (code 1) ]) <*> k
                                   in ([ k * sp ]))
 
 staticPower_s :: Syntax r => Int -> r Int -> r Int
 staticPower_s n k = if n == 0
-                      then lift' 1
+                      then code 1
                       else ([ k * (staticPower_s (n - 1) k) ])
