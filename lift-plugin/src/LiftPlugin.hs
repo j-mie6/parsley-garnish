@@ -14,7 +14,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE MultiWayIf #-}
 module LiftPlugin
-  ( plugin, Pure(..), Syntax(..), overload )
+  ( plugin, Liftable(..), Syntax(..), overload )
 where
 
 -- external
