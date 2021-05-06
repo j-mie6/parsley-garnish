@@ -13,6 +13,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE CPP #-}
 module LiftPlugin
   ( plugin, LiftTo(..), Syntax(..), overload )
 where
@@ -27,7 +28,7 @@ import Module     (mkModuleName)
 import OccName    (mkTcOcc)
 import Plugins    (Plugin (..), defaultPlugin, purePlugin)
 import TcEvidence
-import TcPluginM  (TcPluginM, tcLookupTyCon)
+import TcPluginM  (tcLookupTyCon)
 import TcRnTypes
 import TyCon      (TyCon, tyConSingleDataCon)
 import TyCoRep    (Type (..))
@@ -588,8 +589,13 @@ extractConDetails (Expr.Match { m_pats = [pat], m_grhss = rhs }) = do
   return (vars, cn, rhs)
 extractConDetails _ = Left "More than one match"
 
+
 extractFromPat :: GHC.LPat GHC.GhcRn -> Either String ([GHC.LPat GHC.GhcRn], GHC.Name)
+#if __GLASGOW_HASKELL__ == 806
 extractFromPat (GHC.L _l p) =
+#else
+extractFromPat p =
+#endif
   case p of
     GHC.ConPatIn (GHC.L _l n) con_pat_details
       -> Right (GHC.hsConPatArgs con_pat_details, n)
