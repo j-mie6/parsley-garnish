@@ -1,10 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{- OPTIONS_GHC -dcore-lint #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fplugin=LiftPlugin #-}
+{-# OPTIONS_GHC -fplugin=IdiomsPlugin #-}
 module A where
-
-
-import Prelude hiding (Applicative(..))
 
 import Data.Functor.Identity
 import Language.Haskell.TH.Syntax
@@ -21,6 +20,13 @@ instance LiftTo Code where
 instance LiftTo Identity where
   code = Identity
 
+class Quapplicative q where
+  -- pronounced quapp
+  (>*<) :: q (a -> b) -> q a -> q b
+infixl 9 >*<
+
+instance {-# OVERLAPPABLE #-} Syntax r => Quapplicative r where
+  (>*<) = _ap
 
 foo 'a' = 'a'
 
@@ -100,12 +106,12 @@ letTest :: Syntax r => r Bool
 letTest = overload $ let t x = x
                      in t (code True)
 
-caseTest :: (Syntax r) => r [a] -> r Bool
+caseTest :: Syntax r => r [a] -> r Bool
 caseTest xs = overload $ case xs of
                           [] -> (code False)
                           (_:_) -> (code True)
 
-caseProdTest :: (Syntax r) => r (a, b) -> r a
+caseProdTest :: Syntax r => r (a, b) -> r a
 caseProdTest ab = overload $ case ab of
                                (a, b) -> a
 
@@ -121,15 +127,12 @@ staticPower = overload (\n -> \k ->
                                   then code 1
                                   else (code (*)) k (staticPower ((code (-)) n (code 1))  k))
 
-(<*>) :: Syntax r => r (a -> b) -> r a -> r b
-(<*>) = _ap
-
 staticPowerId :: Syntax r => r (Int -> Int -> Int)
 staticPowerId = overload (\n -> \k ->
                           if ([ n == code 0 ])
                                 then code 1
                                 else
-                                  let sp = staticPowerId <*> ([ n - (code 1) ]) <*> k
+                                  let sp = staticPowerId >*< ([ n - (code 1) ]) >*< k
                                   in ([ k * sp ]))
 
 staticPower_s :: Syntax r => Int -> r Int -> r Int
