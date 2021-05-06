@@ -29,7 +29,12 @@ import OccName    (mkTcOcc)
 import Plugins    (Plugin (..), defaultPlugin, purePlugin)
 import TcEvidence
 import TcPluginM  (tcLookupTyCon)
+#if __GLASGOW_HASKELL__ < 810
 import TcRnTypes
+#else
+import TcRnTypes
+import Constraint
+#endif
 import TyCon      (TyCon, tyConSingleDataCon)
 import TyCoRep    (Type (..))
 import Outputable
@@ -40,7 +45,11 @@ import Bag
 import TcErrors
 import Literal
 import PrelNames
+#if __GLASGOW_HASKELL__ < 810
 import HsDumpAst
+#else
+import GHC.Hs.Dump
+#endif
 import qualified Unique as GHC
 import qualified THNames as GHC
 import Panic
@@ -50,7 +59,16 @@ import qualified Desugar as GHC
 import qualified Finder as GHC
 import qualified GHC hiding (exprType)
 import qualified GhcPlugins as GHC
+#if __GLASGOW_HASKELL__ < 810
 import qualified HsExpr as Expr
+#else
+import qualified GHC.Hs.Expr as Expr
+#endif
+#if __GLASGOW_HASKELL__ >= 810
+import qualified Predicate as GHC
+import qualified TyCoRep as GHC
+#endif
+
 import qualified IfaceEnv as GHC
 import qualified TcEvidence as GHC
 import qualified TcRnMonad as GHC
@@ -66,6 +84,15 @@ import Data.Function
 import Language.Haskell.TH.Syntax (Lift(..))
 import Data.IORef
 import System.IO.Unsafe
+
+#if __GLASGOW_HASKELL__ >= 810
+import GHC.Hs.Extension
+noExt :: NoExtField
+noExt = noExtField
+type NoExt = NoExtField
+#else
+import GHC (noExt, NoExt)
+#endif
 
 -- In this IORef we store how we would have reported the error
 ioRef :: IORef (Int, [TcM ()])
@@ -216,7 +243,11 @@ fakeId :: GHC.Id
 fakeId = GHC.mkVanillaGlobalWithInfo fakeIdName ty info
   where
     info = GHC.noCafIdInfo
+#if __GLASGOW_HASKELL__ < 810
     ty = GHC.mkSpecForAllTys [GHC.alphaTyVar] (GHC.mkFunTy GHC.intTy GHC.alphaTy)
+#else
+    ty = GHC.mkSpecForAllTys [GHC.alphaTyVar] (GHC.mkFunTy GHC.VisArg GHC.intTy GHC.alphaTy)
+#endif
 
 fake_id :: GHC.Id
 fake_id = fakeId
@@ -342,13 +373,13 @@ repair e = return e
 -}
 
 var_body :: GHC.Name -> Expr.LHsExpr GHC.GhcRn
-var_body v = (GHC.noLoc (Expr.HsVar GHC.noExt (GHC.noLoc v)))
+var_body v = (GHC.noLoc (Expr.HsVar noExt  (GHC.noLoc v)))
 
 mkSplice :: Expr.LHsExpr GHC.GhcRn -> TcM CoreExpr
 mkSplice body = do
   hs_env  <- GHC.getTopEnv
   -- [|| var ||]
-  let e = GHC.noLoc $ Expr.HsTcBracketOut GHC.noExt (Expr.TExpBr GHC.noExt body) []
+  let e = GHC.noLoc $ Expr.HsTcBracketOut noExt  (Expr.TExpBr noExt  body) []
 
   ( _, mbe ) <- liftIO ( GHC.deSugarExpr hs_env e )
 
@@ -445,7 +476,7 @@ check_overload_app names@(Names { overloadName } ) v e old_e
 overload_scope :: Names GHC.Name -> Expr.LHsExpr GHC.GhcRn
                                                  -> Expr.LHsExpr GHC.GhcRn
 overload_scope names e =
-    let mkVar = GHC.noLoc . Expr.HsVar GHC.noExt . GHC.noLoc
+    let mkVar = GHC.noLoc . Expr.HsVar noExt  . GHC.noLoc
         namesExpr = fmap (\n -> ExprWithName n (mkVar n)) names
     in everywhereBut (mkQ False (check_pure namesExpr)) (mkT (overloadExpr namesExpr)) e
 
@@ -467,7 +498,7 @@ overloadExpr names@Names{..} le@(GHC.L l e) = go e
     go (Expr.HsLam {}) = GHC.mkHsApp (mkExpr lamName) le
     go (Expr.HsLet _ binds let_rhs) =
       let (binder, rhs) = extractBindInfo names binds
-          pats = [GHC.noLoc $ GHC.VarPat GHC.noExt binder]
+          pats = [GHC.noLoc $ GHC.VarPat noExt  binder]
           body_lam = mkHsLam pats let_rhs
       in foldl' GHC.mkHsApp (mkExpr letName) [rhs, body_lam]
 
@@ -494,12 +525,12 @@ mkHsLamGRHS [] (Expr.GRHSs { grhssGRHSs = grhss, grhssLocalBinds = (GHC.L _ (GHC
 mkHsLamGRHS pats grhs = body_lam
   where
     matches = GHC.mkMatchGroup GHC.Generated [mkGRHSMatch pats grhs]
-    body_lam = GHC.noLoc $ GHC.HsLam GHC.noExt matches
+    body_lam = GHC.noLoc $ GHC.HsLam noExt  matches
 
-mkGRHSMatch :: (GHC.XCMatch p body ~ GHC.NoExt) =>
+mkGRHSMatch :: (GHC.XCMatch p body ~ NoExt) =>
                      [GHC.LPat p]
                      -> Expr.GRHSs p body -> GHC.Located (Expr.Match p body)
-mkGRHSMatch pats rhs = GHC.noLoc $ GHC.Match GHC.noExt GHC.LambdaExpr pats rhs
+mkGRHSMatch pats rhs = GHC.noLoc $ GHC.Match noExt  GHC.LambdaExpr pats rhs
 
 {- Code for dealing with let -}
 
@@ -514,7 +545,7 @@ extractBindInfo names (GHC.L _ (GHC.HsValBinds _ (GHC.XValBindsLR (GHC.NValBinds
         [GHC.L _ (GHC.FunBind _ bid matches _ _)] ->
           case isSimpleMatchGroup matches of
             Just simple -> (bid, simple)
-            _ -> (bid, overloadExpr names (GHC.noLoc $ Expr.HsLam GHC.noExt matches))
+            _ -> (bid, overloadExpr names (GHC.noLoc $ Expr.HsLam noExt  matches))
         -- Not dealing with guards here yet but they could be
         -- transfered onto the lambda
         _ -> panic "abc"
@@ -591,10 +622,11 @@ extractConDetails _ = Left "More than one match"
 
 
 extractFromPat :: GHC.LPat GHC.GhcRn -> Either String ([GHC.LPat GHC.GhcRn], GHC.Name)
-#if __GLASGOW_HASKELL__ == 806
-extractFromPat (GHC.L _l p) =
+#if __GLASGOW_HASKELL__ == 808
+-- Trees that Grow :)
+extractFromPat (GHC.XPat (GHC.L _l p)) =
 #else
-extractFromPat p =
+extractFromPat (GHC.L _l p) =
 #endif
   case p of
     GHC.ConPatIn (GHC.L _l n) con_pat_details
@@ -602,4 +634,24 @@ extractFromPat p =
     GHC.ParPat _ pp -> extractFromPat pp
     GHC.TuplePat _ [a, b] GHC.Boxed ->
       Right ([a, b], tuple2Name)
-    _ -> Left "Complex pattern"
+    {-GHC.VarPat _ _ -> Left "Unexpected VarPat"
+    GHC.WildPat _ -> Left "Unexpected WildPat"
+    GHC.LazyPat _ _ -> Left "Unexpected LazyPat"
+    GHC.AsPat _ _ _ -> Left "Unexpected AsPat"
+    GHC.BangPat _ _ -> Left "Unexpected BangPat"
+    GHC.ListPat _ _ -> Left "Unexpected ListPat"
+    GHC.TuplePat _ _ _ -> Left "Unexpected TuplePat"
+    GHC.SumPat _ _ _ _ -> Left "Unexpected SumPat"
+    GHC.ConPatOut _ _ _ _ _ _ _ -> Left "Unexpected ConPatOut"
+    GHC.ViewPat _ _ _ -> Left "Unexpected ViewPat"
+    GHC.SplicePat _ _ -> Left "Unexpected SplicePat"
+    GHC.LitPat _ _ -> Left "Unexpected LitPat"
+    GHC.NPat _ _ _ _ -> Left "Unexpected NPat"
+    GHC.NPlusKPat _ _ _ _ _ _ -> Left "Unexpected NPlusKPat"
+    GHC.SigPat _ _ _ -> Left "Unexpected SigPat"
+    GHC.CoPat _ _ _ _ -> Left "Unexpected CoPat"
+    GHC.XPat _ -> Left "Trees that bloody Grow"-}
+    _          -> Left "Unexpectedly Complex Pattern"
+#if __GLASGOW_HASKELL__ == 808
+extractFromPat _ = Left "Something isn't a tree that grows?"
+#endif

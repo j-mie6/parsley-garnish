@@ -1,8 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -fplugin=LiftPlugin #-}
 {-# OPTIONS_GHC -fplugin=IdiomsPlugin #-}
+{-# OPTIONS_GHC -fplugin=LiftPlugin #-}
 module A where
 
 import Data.Functor.Identity
@@ -25,7 +25,7 @@ class Quapplicative q where
   (>*<) :: q (a -> b) -> q a -> q b
 infixl 9 >*<
 
-instance {-# OVERLAPPABLE #-} Syntax r => Quapplicative r where
+instance Syntax r => Quapplicative r where
   (>*<) = _ap
 
 foo 'a' = 'a'
@@ -81,7 +81,6 @@ test_con = [|| Just ||]
 test_foo1 = [|| foo1 ||]
 
 --test3 = pure foo1
-
 ifTest :: Syntax r => r Bool
 ifTest = overload $ if (code True) then (code False) else (code True)
 
@@ -106,6 +105,7 @@ letTest :: Syntax r => r Bool
 letTest = overload $ let t x = x
                      in t (code True)
 
+
 caseTest :: Syntax r => r [a] -> r Bool
 caseTest xs = overload $ case xs of
                           [] -> (code False)
@@ -114,6 +114,7 @@ caseTest xs = overload $ case xs of
 caseProdTest :: Syntax r => r (a, b) -> r a
 caseProdTest ab = overload $ case ab of
                                (a, b) -> a
+
 
 power :: Syntax r => Int -> r (Int -> Int)
 power n = let r = power (n - 1)
