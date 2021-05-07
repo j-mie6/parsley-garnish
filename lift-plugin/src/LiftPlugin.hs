@@ -14,6 +14,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE BangPatterns #-}
 module LiftPlugin
   ( plugin, LiftTo(..), Syntax(..), overload )
 where
@@ -179,7 +180,9 @@ liftPlugin =
            , tcPluginStop  = const (return ())
            }
 
-lookupLiftTyCon :: TcPluginM TyCon
+-- TODO: This is going to need to be augmented with unsafeTExpCoerce/unsafeCodeCoerce
+type LiftEnv = TyCon
+lookupLiftTyCon :: TcPluginM LiftEnv
 lookupLiftTyCon = do
     md      <- lookupModule liftModule liftPackage
     liftTcNm <- lookupName md (mkTcOcc "Lift")
@@ -189,13 +192,13 @@ lookupLiftTyCon = do
     liftPackage = fsLit "template-haskell"
 
 -- This plugin solves all instances of (Lift (a -> b)) with a dummy value.
-solveLift :: TyCon -- ^ Lift's TyCon
+solveLift :: LiftEnv -- ^ Lift's TyCon
          -> [Ct]  -- ^ [G]iven constraints
          -> [Ct]  -- ^ [D]erived constraints
          -> [Ct]  -- ^ [W]anted constraints
          -> TcPluginM TcPluginResult
 solveLift _     _ _ []      = return (TcPluginOk [] [])
-solveLift liftTc {-gs ds-} _ _ wanteds =
+solveLift liftTc _gs _ds wanteds = --pprTrace "solveGCD" (ppr liftTc $$ ppr wanteds $$ ppr solved) $
   do res <- mapM (\c -> (, c) <$> evMagic c) solved
      return $! case failed of
        [] -> TcPluginOk res []
@@ -207,12 +210,20 @@ solveLift liftTc {-gs ds-} _ _ wanteds =
     solved, failed :: [Ct]
     (solved,failed) = (liftWanteds, [])
 
+--pprTouch :: Outputable a => String -> a -> a
+--pprTouch name x = pprTrace name (ppr x) x
+
 toLiftCt :: TyCon -> Ct -> Maybe Ct
 toLiftCt liftTc ct =
   case GHC.classifyPredType $ ctEvPred $ ctEvidence ct of
     GHC.ClassPred tc tys
      | classTyCon tc == liftTc
+#if __GLASGOW_HASKELL__ < 810
      , [ty] <- tys
+#else
+     -- GHC 8.10 introduced levity polymorphic Lift, so there is an extra rep
+     , [_rep, ty] <- tys
+#endif
      , GHC.isFunTy ty
       -> Just ct
     _ -> Nothing
@@ -341,7 +352,12 @@ repair expr e = do
       (ty_con, tys) = GHC.splitTyConApp e_ty
       --res = ty_con `GHC.hasKey` GHC.liftClassKey
   if (ty_con `GHC.hasKey` GHC.liftClassKey)
+#if __GLASGOW_HASKELL__ < 810
       && GHC.isFunTy (head tys)
+#else
+      -- GHC 8.10 introduced levity polymorphic Lift, so there is an extra rep
+      && GHC.isFunTy (head (tail tys))
+#endif
     then do
       mres <- checkLiftable expr
       case mres of
@@ -375,10 +391,11 @@ repair e = return e
 var_body :: GHC.Name -> Expr.LHsExpr GHC.GhcRn
 var_body v = (GHC.noLoc (Expr.HsVar noExt  (GHC.noLoc v)))
 
+--TODO: This needs to work for [||var||] as well as [|var|]
 mkSplice :: Expr.LHsExpr GHC.GhcRn -> TcM CoreExpr
 mkSplice body = do
   hs_env  <- GHC.getTopEnv
-  -- [|| var ||]
+  -- [| var |]
   let e = GHC.noLoc $ Expr.HsTcBracketOut noExt  (Expr.TExpBr noExt  body) []
 
   ( _, mbe ) <- liftIO ( GHC.deSugarExpr hs_env e )
@@ -390,9 +407,19 @@ mkSplice body = do
 -- | Construct the specialised dictionary which constructs `[|| foo ||]`
 -- from `lift foo`
 mkLiftDictionary :: GHC.DataCon -> Type -> CoreExpr -> CoreExpr
-mkLiftDictionary dc ty splice =
+mkLiftDictionary dc ty splice = --pprTouch "dict" $!
   let lvar = GHC.mkTemplateLocal 0 ty
-  in mkCoreConApps dc [Type ty, mkCoreLams [lvar] splice]
+      liftImpl = mkCoreLams [lvar] splice
+#if __GLASGOW_HASKELL__ >= 810
+      -- 8.10 introduced a levity polymorphic Lift
+      rep = head (snd (GHC.splitTyConApp ty))
+      -- TODO: This is _so_ not right, but maybe it's fine because newtype?
+      liftTypedImpl = mkCoreLams [lvar] splice
+      args = [Type rep, Type ty, liftImpl, liftTypedImpl]
+#else
+      args = [Type ty, liftImpl]
+#endif
+  in mkCoreConApps dc args
 
 ---- Checking Usages
 -- TODO: I think we could store the landmine usage from the Ct information
@@ -640,7 +667,6 @@ extractFromPat (GHC.L _l p) =
     GHC.AsPat _ _ _ -> Left "Unexpected AsPat"
     GHC.BangPat _ _ -> Left "Unexpected BangPat"
     GHC.ListPat _ _ -> Left "Unexpected ListPat"
-    GHC.TuplePat _ _ _ -> Left "Unexpected TuplePat"
     GHC.SumPat _ _ _ _ -> Left "Unexpected SumPat"
     GHC.ConPatOut _ _ _ _ _ _ _ -> Left "Unexpected ConPatOut"
     GHC.ViewPat _ _ _ -> Left "Unexpected ViewPat"

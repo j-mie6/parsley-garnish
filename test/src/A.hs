@@ -10,6 +10,7 @@ import Language.Haskell.TH.Syntax
 
 import LiftPlugin
 
+--TODO: Test using GHC 9 Code newtype
 newtype Code a = Code (Q (TExp a))
 
 runCode (Code a) = a

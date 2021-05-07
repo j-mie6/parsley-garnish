@@ -21,7 +21,7 @@ library
   -- other-extensions:
   build-depends:       base                >= 4.10    && < 5,
                        ghc-tcplugins-extra >= 0.3     && < 0.5,
-                       ghc                 >= 8.6     && < 8.12,
+                       ghc                 >= 8.6     && < 9,
                        template-haskell    >= 2.14    && < 3,
                        syb                 >= 0.7     && < 0.8
   hs-source-dirs:      src
