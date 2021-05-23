@@ -1,14 +1,13 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -fplugin=IdiomsPlugin #-}
-{-# OPTIONS_GHC -fplugin=LiftPlugin #-}
+{-# OPTIONS_GHC -fplugin=Parsley.LiftPlugin #-}
 module A where
 
 import Data.Functor.Identity
 import Language.Haskell.TH.Syntax
 
-import LiftPlugin
+import Parsley.LiftPlugin
 
 --TODO: Test using GHC 9 Code newtype
 newtype Code a = Code (Q (TExp a))
@@ -117,7 +116,7 @@ caseProdTest ab = overload $ case ab of
                                (a, b) -> a
 
 
-power :: Syntax r => Int -> r (Int -> Int)
+power :: (Quapplicative r, Syntax r) => Int -> r (Int -> Int)
 power n = let r = power (n - 1)
           in overload $ \k -> if (code (==)) (code n) (code 0)
                               then code 1
@@ -131,13 +130,13 @@ staticPower = overload (\n -> \k ->
 
 staticPowerId :: Syntax r => r (Int -> Int -> Int)
 staticPowerId = overload (\n -> \k ->
-                          if ([ n == code 0 ])
+                          if (code (==)) n (code 0)
                                 then code 1
                                 else
-                                  let sp = staticPowerId >*< ([ n - (code 1) ]) >*< k
-                                  in ([ k * sp ]))
+                                  let sp = staticPowerId ((code (-)) n (code 1)) k
+                                  in (code (*)) k sp)
 
-staticPower_s :: Syntax r => Int -> r Int -> r Int
+staticPower_s :: (Quapplicative r, Syntax r) => Int -> r Int -> r Int
 staticPower_s n k = if n == 0
                       then code 1
-                      else ([ k * (staticPower_s (n - 1) k) ])
+                      else (overload ((code (*)) k)) >*< staticPower_s (n - 1) k

@@ -15,9 +15,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE BangPatterns #-}
-module LiftPlugin
-  ( plugin, LiftTo(..), Syntax(..), overload )
-where
+module LiftPlugin (plugin) where
 
 -- external
 import Data.Maybe          (mapMaybe)
@@ -82,7 +80,6 @@ import Data.Generics ( everywhereM,  mkM, listify, everywhere, mkT
 import Data.List
 import GHC.Generics
 import Data.Function
-import Language.Haskell.TH.Syntax (Lift(..))
 import Data.IORef
 import System.IO.Unsafe
 
@@ -105,26 +102,6 @@ addError err = atomicModifyIORef ioRef (\(k, errs) -> ((k+1, errs ++ [err]), k))
 
 getError :: Int -> IO (TcM ())
 getError k = (!! k) . snd <$> readIORef ioRef
-
--- Library
-class LiftTo r where
-  code :: Lift a => a -> r a
-
--- Syntax we can overload
-class LiftTo r => Syntax r where
-  -- Simple overloading
-  _if :: r Bool -> r a -> r a -> r a
-  _lam :: (r a -> r b) -> r (a -> b)
-  _let :: r a -> (r a -> r b) -> r b
-  _ap :: r (a -> b) -> r a -> r b
-
-  -- Case overloading
-  _uncons ::  r [a] -> r res -> (r a -> r [a] -> r res) -> r res
-  _elim_prod :: r (a, b) -> (r a -> r b -> r x) -> r x
-
-overload :: Syntax r => a -> r a
-overload = undefined
-{-# NOINLINE overload #-}
 
 data Names a = Names
   { pureName, ifName, unconsName, lamName, letName, elimProdName, apName
@@ -167,8 +144,7 @@ caseTableInfo =
 
 -- Plugin definitions
 plugin :: Plugin
-plugin = defaultPlugin { {-parsedResultAction = parsedResultAction (Idioms.plugin)
-                       ,-} renamedResultAction = overloadedSyntax
+plugin = defaultPlugin { renamedResultAction = overloadedSyntax
                        , tcPlugin = const (Just liftPlugin)
                        , typeCheckResultAction = replaceLiftDicts
                        , pluginRecompile = purePlugin }
@@ -277,10 +253,10 @@ pattern FakeExpr ty k <- App (App (Var (is_fake_id -> True)) (Type ty)) (Lit (Li
 -----------------------------------------------------------------------------
 -- The source plugin which fills in the dictionaries magically.
 lookupIds :: GHC.Module -> Names String -> TcM (Names GHC.Id)
-lookupIds pm = traverse (\s -> GHC.lookupId =<< GHC.lookupOrig pm (GHC.mkVarOcc s))
+lookupIds pm names = lookupNames pm names >>= traverse GHC.lookupId
 
 lookupNames :: GHC.Module -> Names String -> TcM (Names GHC.Name)
-lookupNames pm = traverse (\s -> GHC.lookupOrig pm (GHC.mkVarOcc s))
+lookupNames pm = traverse (GHC.lookupOrig pm . GHC.mkVarOcc)
 
 replaceLiftDicts :: [GHC.CommandLineOption] -> GHC.ModSummary -> TcGblEnv -> TcM TcGblEnv
 replaceLiftDicts _opts _sum tc_env = do
@@ -291,7 +267,7 @@ replaceLiftDicts _opts _sum tc_env = do
     liftIO
       ( GHC.findImportedModule
           hscEnv
-          ( GHC.mkModuleName "LiftPlugin" )
+          ( GHC.mkModuleName "Parsley.LiftPlugin" )
           Nothing
       )
 
@@ -464,7 +440,7 @@ overloadedSyntax _opts tc_gbl_env rn_group = do
     liftIO
       ( GHC.findImportedModule
           hscEnv
-          ( GHC.mkModuleName "LiftPlugin" )
+          ( GHC.mkModuleName "Parsley.LiftPlugin" )
           Nothing
       )
   namesName <- lookupNames pluginModule namesString
@@ -676,7 +652,7 @@ extractFromPat (GHC.L _l p) =
     GHC.NPlusKPat _ _ _ _ _ _ -> Left "Unexpected NPlusKPat"
     GHC.SigPat _ _ _ -> Left "Unexpected SigPat"
     GHC.CoPat _ _ _ _ -> Left "Unexpected CoPat"
-    GHC.XPat _ -> Left "Trees that bloody Grow"-}
+    GHC.XPat _ -> Left "Trees that Grow"-}
     _          -> Left "Unexpectedly Complex Pattern"
 #if __GLASGOW_HASKELL__ == 808
 extractFromPat _ = Left "Something isn't a tree that grows?"

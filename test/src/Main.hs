@@ -2,7 +2,7 @@
 module Main(main) where
 
 import A
-import LiftPlugin
+import Parsley.LiftPlugin
 import Data.Functor.Identity
 
 main = do

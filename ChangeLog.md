@@ -1,4 +1,4 @@
-# Revision history for `lift-plugin`
+# Revision history for `parsley-garnish`
 
 ## 0.1.0.0 -- YYYY-mm-dd
 
