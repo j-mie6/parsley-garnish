@@ -5,40 +5,23 @@
 module A where
 
 import Data.Functor.Identity
-import Language.Haskell.TH.Syntax
 
-import Parsley.LiftPlugin
-
---TODO: Test using GHC 9 Code newtype
-newtype Code a = Code (Q (TExp a))
-
-runCode (Code a) = a
-
-instance LiftTo Code where
-  code = Code . unsafeTExpCoerce . lift
+import Parsley.Garnish
 
 instance LiftTo Identity where
   code = Identity
-
-class Quapplicative q where
-  -- pronounced quapp
-  (>*<) :: q (a -> b) -> q a -> q b
-infixl 9 >*<
-
-instance Syntax r => Quapplicative r where
-  (>*<) = _ap
 
 foo 'a' = 'a'
 
 foo1 x = x
 
-test1 :: Code String
+test1 :: WQ String
 test1 = code "1"
 
 test2 :: LiftTo r => r (Char -> Char)
 test2 = code foo
 
-test3 :: Code (Char -> Char)
+test3 :: WQ (Char -> Char)
 test3 = test2
 
 test4 :: Identity (Char -> Char)
@@ -84,8 +67,8 @@ test_foo1 = [|| foo1 ||]
 ifTest :: Syntax r => r Bool
 ifTest = overload $ if (code True) then (code False) else (code True)
 
-appTest :: Syntax r => r Bool
-appTest = overload $ (code const) (code True) (code False)
+appTest :: (Quapplicative r, Syntax r) => r Bool
+appTest = (overload $ (code const) (code True)) >*< (code False)
 
 pureTest :: Syntax r => r (Int)
 pureTest = overload $ code (id 5)

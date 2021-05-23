@@ -1,21 +1,18 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, TypeApplications #-}
 module Main(main) where
 
 import A
-import Parsley.LiftPlugin
 import Data.Functor.Identity
+import Parsley (_code, WQ)
 
 main = do
-  print ($$(runCode test3) 'a')
+  print ($$(_code @WQ test3) 'a')
   print ((runIdentity test4) 'a')
   print (just 'a')
   print (qux 'a')
 
-
-
 just :: a -> Maybe a
-just = $$(runCode test7)
-
+just = $$(_code @WQ test7)
 
 qux :: a -> a
-qux = $$(runCode test5)
+qux = $$(_code @WQ test5)

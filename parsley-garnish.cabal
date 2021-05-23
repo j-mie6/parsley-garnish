@@ -4,7 +4,7 @@ version:            0.1.0.0
 -- description:
 license:            BSD3
 license-file:       LICENSE
-author:             Jamie Willis, Matthew Pickering, Oleg Grenrus
+author:             Jamie Willis, Matthew Pickering
 maintainer:         j.willis19@imperial.ac.uk
 -- copyright:
 -- category:
@@ -15,7 +15,7 @@ cabal-version:      >=1.10
 library
   exposed-modules:  Parsley.Garnish,
                     Parsley.LiftPlugin
-  build-depends:    base                >= 4.12    && < 5,
+  build-depends:    base                >= 4.10    && < 5,
                     parsley             >= 0.1     && < 0.2,
                     template-haskell    >= 2.14    && < 3,
                     lift-plugin
