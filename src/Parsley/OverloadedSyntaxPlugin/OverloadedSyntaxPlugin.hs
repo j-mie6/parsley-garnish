@@ -26,7 +26,6 @@ import GHC.Hs.Dump
 import Panic
 
 -- ghc
-import qualified Finder as GHC
 import qualified GHC hiding (exprType)
 import qualified GhcPlugins as GHC
 #if __GLASGOW_HASKELL__ < 810
@@ -34,14 +33,15 @@ import qualified HsExpr as Expr
 #else
 import qualified GHC.Hs.Expr as Expr
 #endif
-import qualified IfaceEnv as GHC
 import qualified TcRnMonad as GHC
 
-import Control.Monad.IO.Class ( liftIO )
 import Data.Generics ( everywhere, mkT, everywhereBut, mkQ )
 import Data.List
 import GHC.Generics
 import Data.Function
+
+import Parsley.PluginUtils (lookupModule, lookupName, lookupNames)
+import qualified Parsley.LiftPlugin.LiftPlugin as LiftPlugin (codeNameString)
 
 #if __GLASGOW_HASKELL__ >= 810
 import GHC.Hs.Extension
@@ -95,15 +95,6 @@ plugin :: Plugin
 plugin = defaultPlugin { renamedResultAction = overloadedSyntax
                        , pluginRecompile = purePlugin }
 
---pprTouch :: Outputable a => String -> a -> a
---pprTouch name x = pprTrace name (ppr x) x
-
-lookupNames :: GHC.Module -> Names String -> TcM (Names GHC.Name)
-lookupNames = traverse . lookupName
-
-lookupName :: GHC.Module -> String -> TcM GHC.Name
-lookupName pm = GHC.lookupOrig pm . GHC.mkVarOcc
-
 {-----------------------------------------------------------------------------
 -  The parser plugin - implement our own overloaded syntax
 -  --------------------------------------------------------------------------}
@@ -113,24 +104,12 @@ overloadedSyntax
                                          -> TcM (TcGblEnv, GHC.HsGroup GHC.GhcRn)
 overloadedSyntax _opts tc_gbl_env rn_group = do
   hscEnv <- GHC.getTopEnv
-  GHC.Found _ pluginModule <-
-    liftIO
-      ( GHC.findImportedModule
-          hscEnv
-          ( GHC.mkModuleName "Parsley.OverloadedSyntaxPlugin" )
-          Nothing
-      )
-  GHC.Found _ liftPluginModule <-
-    liftIO
-      ( GHC.findImportedModule
-          hscEnv
-          ( GHC.mkModuleName "Parsley.LiftPlugin" )
-          Nothing
-      )
+  pluginModule <- lookupModule hscEnv "OverloadedSyntaxPlugin"
+  liftPluginModule <- lookupModule hscEnv "LiftPlugin"
   namesName <- lookupNames pluginModule namesString
-  pureName <- lookupName liftPluginModule "code"
+  codeFnName <- lookupName liftPluginModule LiftPlugin.codeNameString
 
-  let new_group = everywhere (mkT (overload_guard namesName pureName)) rn_group
+  let new_group = everywhere (mkT (overload_guard namesName codeFnName)) rn_group
   return (tc_gbl_env, new_group)
 
 pattern VarApp :: GHC.Name -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
@@ -146,37 +125,37 @@ pattern DollarVarApp v e <- (GHC.unLoc -> Expr.OpApp _ (GHC.unLoc -> Expr.HsVar 
 -- perform the overloading.
 overload_guard :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
                                                  -> Expr.LHsExpr GHC.GhcRn
-overload_guard names pureName old_e =
+overload_guard names codeFnName old_e =
   case old_e of
-    VarApp v e -> check_overload_app names pureName v e old_e
-    DollarVarApp v e -> check_overload_app names pureName v e old_e
+    VarApp v e -> check_overload_app names codeFnName v e old_e
+    DollarVarApp v e -> check_overload_app names codeFnName v e old_e
     _ -> old_e
 
 
 check_overload_app :: Names GHC.Name -> GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
                                                  -> Expr.LHsExpr GHC.GhcRn
                                                  -> Expr.LHsExpr GHC.GhcRn
-check_overload_app names@(Names { overloadName } ) pureName v e old_e
-  | v == overloadName = overload_scope names pureName e
+check_overload_app names@(Names { overloadName } ) codeFnName v e old_e
+  | v == overloadName = overload_scope names codeFnName e
   | otherwise = old_e
 
 -- Now perform the overriding just on the expression in this scope.
 overload_scope :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
                                                  -> Expr.LHsExpr GHC.GhcRn
-overload_scope names pureName e =
+overload_scope names codeFnName e =
     let mkVar = GHC.noLoc . Expr.HsVar noExt  . GHC.noLoc
         namesExpr = fmap (\n -> ExprWithName n (mkVar n)) names
-        pureExpr = ExprWithName pureName (mkVar pureName)
-    in everywhereBut (mkQ False (check_pure pureExpr)) (mkT (overloadExpr namesExpr)) e
+        pureExpr = ExprWithName codeFnName (mkVar codeFnName)
+    in everywhereBut (mkQ False (check_code pureExpr)) (mkT (overloadExpr namesExpr)) e
 
 data ExprWithName = ExprWithName { ename :: GHC.Name, mkExpr :: (Expr.LHsExpr GHC.GhcRn) }
 
--- Don't recurse into pure
-check_pure :: ExprWithName -> Expr.LHsExpr GHC.GhcRn -> Bool
-check_pure pureName (GHC.L _ e) = go e
+-- Don't recurse into LiftPlugin code
+check_code :: ExprWithName -> Expr.LHsExpr GHC.GhcRn -> Bool
+check_code codeFnName (GHC.L _ e) = go e
   where
     go (Expr.HsApp _exp (GHC.L _ (Expr.HsVar _ name)) _)
-      | GHC.unLoc name == ename pureName = True
+      | GHC.unLoc name == ename codeFnName = True
     go _ = False
 
 overloadExpr :: Names ExprWithName -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn

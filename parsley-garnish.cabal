@@ -18,6 +18,7 @@ library
                     Parsley.OverloadedSyntaxPlugin
   other-modules:    Parsley.LiftPlugin.LiftPlugin
                     Parsley.OverloadedSyntaxPlugin.OverloadedSyntaxPlugin
+                    Parsley.PluginUtils
   build-depends:    base                >= 4.10    && < 5,
                     parsley             >= 0.1     && < 0.2,
                     template-haskell    >= 2.14    && < 3,

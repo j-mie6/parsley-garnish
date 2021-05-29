@@ -2,10 +2,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -15,16 +11,15 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE BangPatterns #-}
-module Parsley.LiftPlugin.LiftPlugin (plugin) where
+module Parsley.LiftPlugin.LiftPlugin (plugin, codeNameString) where
 
 -- external
 import Data.Maybe          (mapMaybe)
-import GHC.TcPluginM.Extra (lookupModule, lookupName)
+import qualified GHC.TcPluginM.Extra as TCPluginExtra (lookupModule)
 
 -- GHC API
 import FastString (fsLit)
 import Module     (mkModuleName)
-import OccName    (mkTcOcc)
 import Plugins    (Plugin (..), defaultPlugin, purePlugin)
 import TcEvidence
 import TcPluginM  (tcLookupTyCon)
@@ -48,7 +43,6 @@ import qualified Unique as GHC
 import qualified THNames as GHC
 -- ghc
 import qualified Desugar as GHC
-import qualified Finder as GHC
 import qualified GHC hiding (exprType)
 import qualified GhcPlugins as GHC
 #if __GLASGOW_HASKELL__ < 810
@@ -61,7 +55,6 @@ import qualified Predicate as GHC
 import qualified TyCoRep as GHC
 #endif
 
-import qualified IfaceEnv as GHC
 import qualified TcEvidence as GHC
 import qualified TcRnMonad as GHC
 import qualified TysPrim as GHC
@@ -69,9 +62,10 @@ import qualified TysPrim as GHC
 import Control.Monad.IO.Class ( liftIO )
 import Control.Monad
 import Data.Generics ( everywhereM,  mkM, listify )
-import GHC.Generics
 import Data.IORef
 import System.IO.Unsafe
+
+import Parsley.PluginUtils (lookupModule, lookupId, lookupClass)
 
 #if __GLASGOW_HASKELL__ >= 810
 import GHC.Hs.Extension
@@ -92,15 +86,8 @@ addError err = atomicModifyIORef ioRef (\(k, errs) -> ((k+1, errs ++ [err]), k))
 getError :: Int -> IO (TcM ())
 getError k = (!! k) . snd <$> readIORef ioRef
 
-data Names a = Names
-  { pureName :: a }
-  deriving (Functor, Traversable, Foldable, Generic)
-
-namesString :: Names String
-namesString =
-  Names
-    { pureName = "code"
-    }
+codeNameString :: String
+codeNameString = "code"
 
 -- Plugin definitions
 plugin :: Plugin
@@ -119,8 +106,8 @@ liftPlugin =
 type LiftEnv = TyCon
 lookupLiftTyCon :: TcPluginM LiftEnv
 lookupLiftTyCon = do
-    md      <- lookupModule liftModule liftPackage
-    liftTcNm <- lookupName md (mkTcOcc "Lift")
+    md      <- TCPluginExtra.lookupModule liftModule liftPackage
+    liftTcNm <- lookupClass md "Lift"
     tcLookupTyCon liftTcNm
   where
     liftModule  = mkModuleName "Language.Haskell.TH.Syntax"
@@ -144,9 +131,6 @@ solveLift liftTc _gs _ds wanteds = --pprTrace "solveGCD" (ppr liftTc $$ ppr want
 
     solved, failed :: [Ct]
     (solved,failed) = (liftWanteds, [])
-
---pprTouch :: Outputable a => String -> a -> a
---pprTouch name x = pprTrace name (ppr x) x
 
 toLiftCt :: TyCon -> Ct -> Maybe Ct
 toLiftCt liftTc ct =
@@ -211,32 +195,21 @@ pattern FakeExpr ty k <- App (App (Var (is_fake_id -> True)) (Type ty)) (Lit (Li
 
 -----------------------------------------------------------------------------
 -- The source plugin which fills in the dictionaries magically.
-lookupIds :: GHC.Module -> Names String -> TcM (Names GHC.Id)
-lookupIds pm names = lookupNames pm names >>= traverse GHC.lookupId
-
-lookupNames :: GHC.Module -> Names String -> TcM (Names GHC.Name)
-lookupNames pm = traverse (GHC.lookupOrig pm . GHC.mkVarOcc)
 
 replaceLiftDicts :: [GHC.CommandLineOption] -> GHC.ModSummary -> TcGblEnv -> TcM TcGblEnv
 replaceLiftDicts _opts _sum tc_env = do
   hscEnv <- GHC.getTopEnv
   {-v <- liftIO (readIORef ioRef)-}
 
-  GHC.Found _ pluginModule <-
-    liftIO
-      ( GHC.findImportedModule
-          hscEnv
-          ( GHC.mkModuleName "Parsley.LiftPlugin" )
-          Nothing
-      )
+  pluginModule <- lookupModule hscEnv "LiftPlugin"
 
   -- This is the identifier we want to give some magic behaviour
-  Names{..} <- lookupIds pluginModule namesString
+  codeFnName <- lookupId pluginModule codeNameString
 
   -- We now look everywhere for it and replace the `Lift` dictionaries
   -- where we find it.
   new_tcg_binds <-
-     mkM ( rewriteLiftDict pureName ) `everywhereM` GHC.tcg_binds tc_env
+     mkM ( rewriteLiftDict codeFnName ) `everywhereM` GHC.tcg_binds tc_env
 
   -- Check if there are any instances which remain unsolved
   checkUsages (GHC.tcg_ev_binds tc_env) new_tcg_binds
@@ -312,16 +285,6 @@ makeError (GHC.L l e) =
   where
     msg = text "Unable to magically lift the argument."
           <+> text "It probably isn't statically known."
-
-{-
-  mb_local_use <- GHC.getStageAndBindLevel (GHC.idName v)
-  case mb_local_use of
-    Just (top_level, bind_lvl, use_stage)
-      | GHC.isNotTopLevel top_level
-      -> GHC.panicDoc "error" (ppr v)
-    _ -> return .
-repair e = return e
--}
 
 var_body :: GHC.Name -> Expr.LHsExpr GHC.GhcRn
 var_body v = (GHC.noLoc (Expr.HsVar noExt  (GHC.noLoc v)))
