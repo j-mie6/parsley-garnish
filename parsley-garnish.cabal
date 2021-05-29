@@ -16,6 +16,7 @@ library
   exposed-modules:  Parsley.Garnish,
                     Parsley.LiftPlugin
                     Parsley.OverloadedSyntaxPlugin
+                    Parsley.OverloadedQuotesPlugin
   other-modules:    Parsley.PluginUtils
                     -- Lift Plugin
                     Parsley.LiftPlugin.Plugin
