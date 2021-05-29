@@ -1,3 +1,2 @@
-packages: lift-plugin/lift-plugin.cabal
+packages: parsley-garnish.cabal
         , test/test.cabal
-        , parsley-garnish.cabal

@@ -1,10 +1,7 @@
-module Parsley.LiftPlugin (LiftTo(..), Syntax(..), overload, module Plugin) where
+module Parsley.OverloadedSyntaxPlugin (Syntax(..), overload, module Plugin) where
 
-import Parsley.LiftPlugin.LiftPlugin as Plugin (plugin)
-import Language.Haskell.TH.Syntax (Lift(..))
-
-class LiftTo r where
-  code :: Lift a => a -> r a
+import Parsley.LiftPlugin (LiftTo)
+import Parsley.OverloadedSyntaxPlugin.OverloadedSyntaxPlugin as Plugin (plugin)
 
 -- Syntax we can overload
 class LiftTo r => Syntax r where
