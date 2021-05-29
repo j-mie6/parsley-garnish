@@ -16,7 +16,11 @@ library
   exposed-modules:  Parsley.Garnish,
                     Parsley.LiftPlugin
                     Parsley.OverloadedSyntaxPlugin
-  other-modules:    Parsley.LiftPlugin.LiftPlugin
+  other-modules:    Parsley.LiftPlugin.Plugin
+                    Parsley.LiftPlugin.Error
+                    Parsley.LiftPlugin.Fake
+                    Parsley.LiftPlugin.LiftReplace
+                    Parsley.LiftPlugin.LiftFind
                     Parsley.OverloadedSyntaxPlugin.OverloadedSyntaxPlugin
                     Parsley.PluginUtils
   build-depends:    base                >= 4.10    && < 5,

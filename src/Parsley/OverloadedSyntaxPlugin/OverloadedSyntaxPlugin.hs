@@ -41,7 +41,7 @@ import GHC.Generics
 import Data.Function
 
 import Parsley.PluginUtils (lookupModule, lookupName, lookupNames)
-import qualified Parsley.LiftPlugin.LiftPlugin as LiftPlugin (codeNameString)
+import qualified Parsley.LiftPlugin.LiftReplace as LiftPlugin (codeNameString)
 
 #if __GLASGOW_HASKELL__ >= 810
 import GHC.Hs.Extension
@@ -52,10 +52,9 @@ type NoExt = NoExtField
 import GHC (noExt, NoExt)
 #endif
 
-data Names a = Names
-  { ifName, unconsName, lamName, letName, elimProdName, apName
-    , overloadName :: a }
-  deriving (Functor, Traversable, Foldable, Generic)
+data Names a = Names {
+    ifName, unconsName, lamName, letName, elimProdName, apName, overloadName :: a
+  } deriving (Functor, Traversable, Foldable, Generic)
 
 namesString :: Names String
 namesString =
@@ -92,16 +91,13 @@ caseTableInfo =
 
 -- Plugin definitions
 plugin :: Plugin
-plugin = defaultPlugin { renamedResultAction = overloadedSyntax
-                       , pluginRecompile = purePlugin }
+plugin = defaultPlugin { renamedResultAction = overloadedSyntax, pluginRecompile = purePlugin }
 
 {-----------------------------------------------------------------------------
 -  The parser plugin - implement our own overloaded syntax
 -  --------------------------------------------------------------------------}
 
-overloadedSyntax
-  :: [GHC.CommandLineOption] -> TcGblEnv -> GHC.HsGroup GHC.GhcRn
-                                         -> TcM (TcGblEnv, GHC.HsGroup GHC.GhcRn)
+overloadedSyntax :: [GHC.CommandLineOption] -> TcGblEnv -> GHC.HsGroup GHC.GhcRn -> TcM (TcGblEnv, GHC.HsGroup GHC.GhcRn)
 overloadedSyntax _opts tc_gbl_env rn_group = do
   hscEnv <- GHC.getTopEnv
   pluginModule <- lookupModule hscEnv "OverloadedSyntaxPlugin"
@@ -123,8 +119,7 @@ pattern DollarVarApp v e <- (GHC.unLoc -> Expr.OpApp _ (GHC.unLoc -> Expr.HsVar 
 
 -- Look for direct applications of `overload e` or `overload $ e` and then
 -- perform the overloading.
-overload_guard :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
-                                                 -> Expr.LHsExpr GHC.GhcRn
+overload_guard :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
 overload_guard names codeFnName old_e =
   case old_e of
     VarApp v e -> check_overload_app names codeFnName v e old_e
@@ -132,12 +127,10 @@ overload_guard names codeFnName old_e =
     _ -> old_e
 
 
-check_overload_app :: Names GHC.Name -> GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
-                                                 -> Expr.LHsExpr GHC.GhcRn
-                                                 -> Expr.LHsExpr GHC.GhcRn
+check_overload_app :: Names GHC.Name -> GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
 check_overload_app names@(Names { overloadName } ) codeFnName v e old_e
   | v == overloadName = overload_scope names codeFnName e
-  | otherwise = old_e
+  | otherwise         = old_e
 
 -- Now perform the overriding just on the expression in this scope.
 overload_scope :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
@@ -239,12 +232,6 @@ isSimpleMatchGroup (Expr.MG { mg_alts = matches })
 isSimpleMatchGroup (Expr.XMatchGroup _) = panic "unhandled"
 
 {- Code for dealing with case -}
-
---sd :: Data a => a -> SDoc
---sd = showAstData BlankSrcSpan
-
---deriving instance Data p => Data (Expr.Match p (Expr.LHsExpr p))
-
 -- Look at a case and see if it's a simple match on a data con
 caseDataCon :: Names ExprWithName
             -> Expr.LHsExpr (GHC.GhcRn)
