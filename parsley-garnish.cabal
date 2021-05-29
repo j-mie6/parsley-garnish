@@ -16,13 +16,18 @@ library
   exposed-modules:  Parsley.Garnish,
                     Parsley.LiftPlugin
                     Parsley.OverloadedSyntaxPlugin
-  other-modules:    Parsley.LiftPlugin.Plugin
+  other-modules:    Parsley.PluginUtils
+                    -- Lift Plugin
+                    Parsley.LiftPlugin.Plugin
                     Parsley.LiftPlugin.Error
                     Parsley.LiftPlugin.Fake
                     Parsley.LiftPlugin.LiftReplace
                     Parsley.LiftPlugin.LiftFind
-                    Parsley.OverloadedSyntaxPlugin.OverloadedSyntaxPlugin
-                    Parsley.PluginUtils
+                    -- Overloaded Syntax Plugin
+                    Parsley.OverloadedSyntaxPlugin.Plugin
+                    -- Overloaded Quotes Plugin
+                    Parsley.OverloadedQuotesPlugin.Plugin
+
   build-depends:    base                >= 4.10    && < 5,
                     parsley             >= 0.1     && < 0.2,
                     template-haskell    >= 2.14    && < 3,

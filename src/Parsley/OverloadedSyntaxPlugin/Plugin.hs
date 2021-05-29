@@ -10,7 +10,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE CPP #-}
-module Parsley.OverloadedSyntaxPlugin.OverloadedSyntaxPlugin (plugin) where
+module Parsley.OverloadedSyntaxPlugin.Plugin (plugin) where
 
 -- GHC API
 import Plugins    (Plugin (..), defaultPlugin, purePlugin)

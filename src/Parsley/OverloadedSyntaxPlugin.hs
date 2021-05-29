@@ -1,7 +1,7 @@
 module Parsley.OverloadedSyntaxPlugin (Syntax(..), overload, module Plugin) where
 
 import Parsley.LiftPlugin (LiftTo)
-import Parsley.OverloadedSyntaxPlugin.OverloadedSyntaxPlugin as Plugin (plugin)
+import Parsley.OverloadedSyntaxPlugin.Plugin as Plugin (plugin)
 
 -- Syntax we can overload
 class LiftTo r => Syntax r where
