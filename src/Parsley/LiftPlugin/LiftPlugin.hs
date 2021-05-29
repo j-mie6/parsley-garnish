@@ -44,15 +44,8 @@ import Bag
 import TcErrors
 import Literal
 import PrelNames
-#if __GLASGOW_HASKELL__ < 810
-import HsDumpAst
-#else
-import GHC.Hs.Dump
-#endif
 import qualified Unique as GHC
 import qualified THNames as GHC
-import Panic
-
 -- ghc
 import qualified Desugar as GHC
 import qualified Finder as GHC
@@ -75,11 +68,8 @@ import qualified TysPrim as GHC
 
 import Control.Monad.IO.Class ( liftIO )
 import Control.Monad
-import Data.Generics ( everywhereM,  mkM, listify, everywhere, mkT
-                     , everywhereBut, mkQ )
-import Data.List
+import Data.Generics ( everywhereM,  mkM, listify )
 import GHC.Generics
-import Data.Function
 import Data.IORef
 import System.IO.Unsafe
 
@@ -87,9 +77,8 @@ import System.IO.Unsafe
 import GHC.Hs.Extension
 noExt :: NoExtField
 noExt = noExtField
-type NoExt = NoExtField
 #else
-import GHC (noExt, NoExt)
+import GHC (noExt)
 #endif
 
 -- In this IORef we store how we would have reported the error
@@ -104,48 +93,18 @@ getError :: Int -> IO (TcM ())
 getError k = (!! k) . snd <$> readIORef ioRef
 
 data Names a = Names
-  { pureName, ifName, unconsName, lamName, letName, elimProdName, apName
-    , overloadName :: a }
+  { pureName :: a }
   deriving (Functor, Traversable, Foldable, Generic)
 
 namesString :: Names String
 namesString =
   Names
     { pureName = "code"
-    , ifName = "_if"
-    , unconsName = "_uncons"
-    , lamName = "_lam"
-    , letName = "_let"
-    , elimProdName = "_elim_prod"
-    , apName = "_ap"
-    , overloadName = "overload"
     }
-
--- Maps a representative name to the ordering and constructors we expect
--- with their arity
-caseTable :: GHC.NameEnv CaseRow
-caseTable = GHC.mkNameEnv [(fst (head (caseInfo ci)), ci) | ci <- caseTableInfo ]
-
-data CaseRow = CaseRow { _overloadCase :: (forall a . Names a -> a)
-                       , caseInfo :: [(GHC.Name, Int)]
-                       }
-
--- mkCaseRow enforces the ordering invariant
-mkCaseRow :: (forall a . Names a -> a) -> [(GHC.Name, Int)] -> CaseRow
-mkCaseRow sel info = CaseRow sel (sortBy (GHC.stableNameCmp `on` fst) info)
-
-tuple2Name :: GHC.Name
-tuple2Name = GHC.dataConName (GHC.tupleDataCon GHC.Boxed 2)
-
-caseTableInfo :: [CaseRow]
-caseTableInfo =
-  [ mkCaseRow unconsName [(GHC.consDataConName, 2), (GHC.nilDataConName, 0)]
-  , mkCaseRow elimProdName [(tuple2Name, 2)] ]
 
 -- Plugin definitions
 plugin :: Plugin
-plugin = defaultPlugin { {-renamedResultAction = overloadedSyntax
-                       , -}tcPlugin = const (Just liftPlugin)
+plugin = defaultPlugin { tcPlugin = const (Just liftPlugin)
                        , typeCheckResultAction = replaceLiftDicts
                        , pluginRecompile = purePlugin }
 
@@ -425,235 +384,3 @@ getFakeDicts = mapMaybe getFakeDict
   where
     getFakeDict (EvBind r (EvExpr (FakeExpr _ k)) _) = Just (r, k)
     getFakeDict _ = Nothing
-
-
-{-----------------------------------------------------------------------------
--  The parser plugin - implement our own overloaded syntax
--  --------------------------------------------------------------------------}
-
-overloadedSyntax
-  :: [GHC.CommandLineOption] -> TcGblEnv -> GHC.HsGroup GHC.GhcRn
-                                         -> TcM (TcGblEnv, GHC.HsGroup GHC.GhcRn)
-overloadedSyntax _opts tc_gbl_env rn_group = do
-  hscEnv <- GHC.getTopEnv
-  GHC.Found _ pluginModule <-
-    liftIO
-      ( GHC.findImportedModule
-          hscEnv
-          ( GHC.mkModuleName "Parsley.LiftPlugin" )
-          Nothing
-      )
-  namesName <- lookupNames pluginModule namesString
-
-  let new_group = everywhere (mkT (overload_guard namesName)) rn_group
-  return (tc_gbl_env, new_group)
-
-pattern VarApp :: GHC.Name -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
-pattern VarApp v e <- (GHC.unLoc -> Expr.HsApp _ (GHC.unLoc -> Expr.HsVar _ (GHC.unLoc -> v)) e)
-
-is_dollar :: GHC.Name -> Bool
-is_dollar = (== dollarName)
-
-pattern DollarVarApp :: GHC.Name -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
-pattern DollarVarApp v e <- (GHC.unLoc -> Expr.OpApp _ (GHC.unLoc -> Expr.HsVar _ (GHC.unLoc -> v)) (GHC.unLoc -> Expr.HsVar _ (is_dollar . GHC.unLoc -> True)) e)
-
--- Look for direct applications of `overload e` or `overload $ e` and then
--- perform the overloading.
-overload_guard :: Names GHC.Name -> Expr.LHsExpr GHC.GhcRn
-                                                 -> Expr.LHsExpr GHC.GhcRn
-overload_guard names old_e =
-  case old_e of
-    VarApp v e -> check_overload_app names v e old_e
-    DollarVarApp v e -> check_overload_app names v e old_e
-    _ -> old_e
-
-
-check_overload_app :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
-                                                 -> Expr.LHsExpr GHC.GhcRn
-                                                 -> Expr.LHsExpr GHC.GhcRn
-check_overload_app names@(Names { overloadName } ) v e old_e
-  | v == overloadName = overload_scope names e
-  | otherwise = old_e
-
--- Now perform the overriding just on the expression in this scope.
-overload_scope :: Names GHC.Name -> Expr.LHsExpr GHC.GhcRn
-                                                 -> Expr.LHsExpr GHC.GhcRn
-overload_scope names e =
-    let mkVar = GHC.noLoc . Expr.HsVar noExt  . GHC.noLoc
-        namesExpr = fmap (\n -> ExprWithName n (mkVar n)) names
-    in everywhereBut (mkQ False (check_pure namesExpr)) (mkT (overloadExpr namesExpr)) e
-
-data ExprWithName = ExprWithName { ename :: GHC.Name, mkExpr :: (Expr.LHsExpr GHC.GhcRn) }
-
--- Don't recurse into pure
-check_pure :: Names ExprWithName -> Expr.LHsExpr GHC.GhcRn -> Bool
-check_pure Names{..} (GHC.L _ e) = go e
-  where
-    go (Expr.HsApp _exp (GHC.L _ (Expr.HsVar _ name)) _)
-      | GHC.unLoc name == ename pureName = True
-    go _ = False
-
-overloadExpr :: Names ExprWithName -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
-overloadExpr names@Names{..} le@(GHC.L l e) = go e
-  where
-    go (Expr.HsIf _ext _ p te fe) = foldl' GHC.mkHsApp (mkExpr ifName) [p, te, fe]
-    go (Expr.HsApp _exp e1 e2) = foldl' GHC.mkHsApp (mkExpr apName) [e1, e2]
-    go (Expr.HsLam {}) = GHC.mkHsApp (mkExpr lamName) le
-    go (Expr.HsLet _ binds let_rhs) =
-      let (binder, rhs) = extractBindInfo names binds
-          pats = [GHC.noLoc $ GHC.VarPat noExt  binder]
-          body_lam = mkHsLam pats let_rhs
-      in foldl' GHC.mkHsApp (mkExpr letName) [rhs, body_lam]
-
-    go (Expr.HsCase _ext scrut mg) =
-      let res = caseDataCon names scrut mg
-      in case res of
-           Left err -> panic err
-           Right expr -> expr
-
-    go expr = GHC.L l expr
-
-mkHsLam :: [GHC.LPat GHC.GhcRn] -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr (GHC.GhcRn)
-mkHsLam pats body = mkHsLamGRHS pats (GHC.unguardedGRHSs body)
-
-mkHsLamGRHS :: [GHC.LPat GHC.GhcRn] -> Expr.GRHSs GHC.GhcRn (GHC.LHsExpr GHC.GhcRn)
-                                    -> Expr.LHsExpr (GHC.GhcRn)
-mkHsLamGRHS [] (Expr.GRHSs { grhssGRHSs = grhss, grhssLocalBinds = (GHC.L _ (GHC.EmptyLocalBinds _)) }) =
-  case grhss of
-    [GHC.L _ grhs] -> case simpleGRHS grhs of
-                Just e -> e
-                Nothing -> panic "GRHS is not simple2"
-
-    _ -> panic "GRHS is not simple"
-mkHsLamGRHS pats grhs = body_lam
-  where
-    matches = GHC.mkMatchGroup GHC.Generated [mkGRHSMatch pats grhs]
-    body_lam = GHC.noLoc $ GHC.HsLam noExt  matches
-
-mkGRHSMatch :: (GHC.XCMatch p body ~ NoExt) =>
-                     [GHC.LPat p]
-                     -> Expr.GRHSs p body -> GHC.Located (Expr.Match p body)
-mkGRHSMatch pats rhs = GHC.noLoc $ GHC.Match noExt  GHC.LambdaExpr pats rhs
-
-{- Code for dealing with let -}
-
--- Get the binder and body of let
-extractBindInfo :: Names ExprWithName -> GHC.LHsLocalBinds GHC.GhcRn -> (GHC.Located GHC.Name, GHC.LHsExpr GHC.GhcRn)
-extractBindInfo names (GHC.L _ (GHC.HsValBinds _ (GHC.XValBindsLR (GHC.NValBinds binds _)))) = getBinds binds
-  where
-    getBinds bs =
-      let [rs] = map snd bs
-      in
-      case bagToList rs of
-        [GHC.L _ (GHC.FunBind _ bid matches _ _)] ->
-          case isSimpleMatchGroup matches of
-            Just simple -> (bid, simple)
-            _ -> (bid, overloadExpr names (GHC.noLoc $ Expr.HsLam noExt  matches))
-        -- Not dealing with guards here yet but they could be
-        -- transfered onto the lambda
-        _ -> panic "abc"
-extractBindInfo _ e = panicDoc "abc2" (showAstData BlankSrcSpan e)
-
-simpleGRHS :: Expr.GRHS p w -> Maybe w
-simpleGRHS grhs =
-  case grhs of
-    (Expr.GRHS _ [] body) -> Just body
-    _ -> Nothing
-
--- A simple match group is one which is just a variable with no
--- arguments.
--- let x = y
-isSimpleMatchGroup :: Expr.MatchGroup id body -> Maybe body
-isSimpleMatchGroup (Expr.MG { mg_alts = matches })
-  | [GHC.L _ match] <- GHC.unLoc matches
-  , Expr.Match { m_grhss = GHC.GRHSs { grhssGRHSs = [rhs] }
-               , m_pats = [] } <- match
-  = simpleGRHS (GHC.unLoc rhs)
-  | otherwise
-  = Nothing
-isSimpleMatchGroup (Expr.XMatchGroup _) = panic "unhandled"
-
-{- Code for dealing with case -}
-
---sd :: Data a => a -> SDoc
---sd = showAstData BlankSrcSpan
-
---deriving instance Data p => Data (Expr.Match p (Expr.LHsExpr p))
-
--- Look at a case and see if it's a simple match on a data con
-caseDataCon :: Names ExprWithName
-            -> Expr.LHsExpr (GHC.GhcRn)
-            -> Expr.MatchGroup (GHC.GhcRn) (Expr.LHsExpr (GHC.GhcRn))
-            -> Either String (GHC.LHsExpr GHC.GhcRn)
-caseDataCon names scrut (Expr.MG { mg_alts = (GHC.L _l alts) }) = do
-  res <- sortBy (\(_, n, _) (_, n1, _)-> GHC.stableNameCmp n n1) <$>
-              (mapM (extractConDetails . GHC.unLoc) $ alts)
-  case res of
-    [] -> Left "No patterns"
-    ps@((_, n, _):_) ->
-      case GHC.lookupNameEnv caseTable n of
-        Nothing -> Left "Not able to overload this constructor"
-        Just (CaseRow sel spec) ->
-          let con = GHC.mkHsApp (mkExpr (sel names)) scrut
-          in checkAndBuild con ps spec
-caseDataCon _ _ (Expr.XMatchGroup _) = panic "unhandled"
-
-checkAndBuild :: Expr.LHsExpr GHC.GhcRn -- The constructor
-              -> [([GHC.LPat GHC.GhcRn], GHC.Name
-                                       , Expr.GRHSs GHC.GhcRn (GHC.LHsExpr GHC.GhcRn))]
-              -> [(GHC.Name, Int)]
-              -> Either String (Expr.LHsExpr GHC.GhcRn)
-checkAndBuild con [] [] = Right con
-checkAndBuild _con (_:_) [] = Left "Too many patterns in program"
-checkAndBuild _con [] (_:_) = Left "Not enough patterns in program"
-checkAndBuild con (p:ps) (s:ss) = do
-  res <- checkAndBuild con ps ss
-  let (pats, pat_con, rhs) = p
-      (spec_con, arity) = s
-  if | pat_con /= spec_con -> Left "Constructors do not match"
-     | length pats /= arity -> Left "Arity does not patch"
-     | otherwise -> Right (GHC.mkHsApp res (mkHsLamGRHS pats rhs))
-
--- Extract, binders, con name and rhs
-extractConDetails :: Expr.Match GHC.GhcRn body
-                  -> Either String ([GHC.LPat GHC.GhcRn], GHC.Name, Expr.GRHSs GHC.GhcRn body)
--- There should only be one pattern in a case
-extractConDetails (Expr.Match { m_pats = [pat], m_grhss = rhs }) = do
-  (vars, cn) <- extractFromPat pat
-  return (vars, cn, rhs)
-extractConDetails _ = Left "More than one match"
-
-
-extractFromPat :: GHC.LPat GHC.GhcRn -> Either String ([GHC.LPat GHC.GhcRn], GHC.Name)
-#if __GLASGOW_HASKELL__ == 808
--- Trees that Grow :)
-extractFromPat (GHC.XPat (GHC.L _l p)) =
-#else
-extractFromPat (GHC.L _l p) =
-#endif
-  case p of
-    GHC.ConPatIn (GHC.L _l n) con_pat_details
-      -> Right (GHC.hsConPatArgs con_pat_details, n)
-    GHC.ParPat _ pp -> extractFromPat pp
-    GHC.TuplePat _ [a, b] GHC.Boxed ->
-      Right ([a, b], tuple2Name)
-    {-GHC.VarPat _ _ -> Left "Unexpected VarPat"
-    GHC.WildPat _ -> Left "Unexpected WildPat"
-    GHC.LazyPat _ _ -> Left "Unexpected LazyPat"
-    GHC.AsPat _ _ _ -> Left "Unexpected AsPat"
-    GHC.BangPat _ _ -> Left "Unexpected BangPat"
-    GHC.ListPat _ _ -> Left "Unexpected ListPat"
-    GHC.SumPat _ _ _ _ -> Left "Unexpected SumPat"
-    GHC.ConPatOut _ _ _ _ _ _ _ -> Left "Unexpected ConPatOut"
-    GHC.ViewPat _ _ _ -> Left "Unexpected ViewPat"
-    GHC.SplicePat _ _ -> Left "Unexpected SplicePat"
-    GHC.LitPat _ _ -> Left "Unexpected LitPat"
-    GHC.NPat _ _ _ _ -> Left "Unexpected NPat"
-    GHC.NPlusKPat _ _ _ _ _ _ -> Left "Unexpected NPlusKPat"
-    GHC.SigPat _ _ _ -> Left "Unexpected SigPat"
-    GHC.CoPat _ _ _ _ -> Left "Unexpected CoPat"
-    GHC.XPat _ -> Left "Trees that Grow"-}
-    _          -> Left "Unexpectedly Complex Pattern"
-#if __GLASGOW_HASKELL__ == 808
-extractFromPat _ = Left "Something isn't a tree that grows?"
-#endif

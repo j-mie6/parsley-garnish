@@ -4,10 +4,12 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Parsley.Garnish (
     module Parsley,
-    module Parsley.LiftPlugin
+    module Parsley.LiftPlugin,
+    module Parsley.OverloadedSyntaxPlugin
   ) where
 
-import Parsley.LiftPlugin (LiftTo(..), Syntax(..), overload)
+import Parsley.LiftPlugin (LiftTo(..))
+import Parsley.OverloadedSyntaxPlugin (Syntax(..), overload)
 import Parsley (Quapplicative(makeQ, _val, _code, (>*<)), WQ, Code)
 import Parsley.Defunctionalized (Defunc)
 

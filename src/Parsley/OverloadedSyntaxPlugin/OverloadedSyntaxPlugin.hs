@@ -53,15 +53,14 @@ import GHC (noExt, NoExt)
 #endif
 
 data Names a = Names
-  { pureName, ifName, unconsName, lamName, letName, elimProdName, apName
+  { ifName, unconsName, lamName, letName, elimProdName, apName
     , overloadName :: a }
   deriving (Functor, Traversable, Foldable, Generic)
 
 namesString :: Names String
 namesString =
   Names
-    { pureName = "code"
-    , ifName = "_if"
+    { ifName = "_if"
     , unconsName = "_uncons"
     , lamName = "_lam"
     , letName = "_let"
@@ -100,7 +99,10 @@ plugin = defaultPlugin { renamedResultAction = overloadedSyntax
 --pprTouch name x = pprTrace name (ppr x) x
 
 lookupNames :: GHC.Module -> Names String -> TcM (Names GHC.Name)
-lookupNames pm = traverse (GHC.lookupOrig pm . GHC.mkVarOcc)
+lookupNames = traverse . lookupName
+
+lookupName :: GHC.Module -> String -> TcM GHC.Name
+lookupName pm = GHC.lookupOrig pm . GHC.mkVarOcc
 
 {-----------------------------------------------------------------------------
 -  The parser plugin - implement our own overloaded syntax
@@ -115,12 +117,20 @@ overloadedSyntax _opts tc_gbl_env rn_group = do
     liftIO
       ( GHC.findImportedModule
           hscEnv
+          ( GHC.mkModuleName "Parsley.OverloadedSyntaxPlugin" )
+          Nothing
+      )
+  GHC.Found _ liftPluginModule <-
+    liftIO
+      ( GHC.findImportedModule
+          hscEnv
           ( GHC.mkModuleName "Parsley.LiftPlugin" )
           Nothing
       )
   namesName <- lookupNames pluginModule namesString
+  pureName <- lookupName liftPluginModule "code"
 
-  let new_group = everywhere (mkT (overload_guard namesName)) rn_group
+  let new_group = everywhere (mkT (overload_guard namesName pureName)) rn_group
   return (tc_gbl_env, new_group)
 
 pattern VarApp :: GHC.Name -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
@@ -134,35 +144,36 @@ pattern DollarVarApp v e <- (GHC.unLoc -> Expr.OpApp _ (GHC.unLoc -> Expr.HsVar 
 
 -- Look for direct applications of `overload e` or `overload $ e` and then
 -- perform the overloading.
-overload_guard :: Names GHC.Name -> Expr.LHsExpr GHC.GhcRn
+overload_guard :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
                                                  -> Expr.LHsExpr GHC.GhcRn
-overload_guard names old_e =
+overload_guard names pureName old_e =
   case old_e of
-    VarApp v e -> check_overload_app names v e old_e
-    DollarVarApp v e -> check_overload_app names v e old_e
+    VarApp v e -> check_overload_app names pureName v e old_e
+    DollarVarApp v e -> check_overload_app names pureName v e old_e
     _ -> old_e
 
 
-check_overload_app :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
+check_overload_app :: Names GHC.Name -> GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
                                                  -> Expr.LHsExpr GHC.GhcRn
                                                  -> Expr.LHsExpr GHC.GhcRn
-check_overload_app names@(Names { overloadName } ) v e old_e
-  | v == overloadName = overload_scope names e
+check_overload_app names@(Names { overloadName } ) pureName v e old_e
+  | v == overloadName = overload_scope names pureName e
   | otherwise = old_e
 
 -- Now perform the overriding just on the expression in this scope.
-overload_scope :: Names GHC.Name -> Expr.LHsExpr GHC.GhcRn
+overload_scope :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
                                                  -> Expr.LHsExpr GHC.GhcRn
-overload_scope names e =
+overload_scope names pureName e =
     let mkVar = GHC.noLoc . Expr.HsVar noExt  . GHC.noLoc
         namesExpr = fmap (\n -> ExprWithName n (mkVar n)) names
-    in everywhereBut (mkQ False (check_pure namesExpr)) (mkT (overloadExpr namesExpr)) e
+        pureExpr = ExprWithName pureName (mkVar pureName)
+    in everywhereBut (mkQ False (check_pure pureExpr)) (mkT (overloadExpr namesExpr)) e
 
 data ExprWithName = ExprWithName { ename :: GHC.Name, mkExpr :: (Expr.LHsExpr GHC.GhcRn) }
 
 -- Don't recurse into pure
-check_pure :: Names ExprWithName -> Expr.LHsExpr GHC.GhcRn -> Bool
-check_pure Names{..} (GHC.L _ e) = go e
+check_pure :: ExprWithName -> Expr.LHsExpr GHC.GhcRn -> Bool
+check_pure pureName (GHC.L _ e) = go e
   where
     go (Expr.HsApp _exp (GHC.L _ (Expr.HsVar _ name)) _)
       | GHC.unLoc name == ename pureName = True
