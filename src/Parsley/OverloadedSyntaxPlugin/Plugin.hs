@@ -120,48 +120,36 @@ pattern DollarVarApp v e <- (GHC.unLoc -> Expr.OpApp _ (GHC.unLoc -> Expr.HsVar 
 -- Look for direct applications of `overload e` or `overload $ e` and then
 -- perform the overloading.
 overload_guard :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
-overload_guard names codeFnName old_e =
+overload_guard names@(Names {overloadName}) codeFnName old_e =
   case old_e of
-    VarApp v e -> check_overload_app names codeFnName v e old_e
-    DollarVarApp v e -> check_overload_app names codeFnName v e old_e
-    _ -> old_e
-
-
-check_overload_app :: Names GHC.Name -> GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
-check_overload_app names@(Names { overloadName } ) codeFnName v e old_e
-  | v == overloadName = overload_scope names codeFnName e
-  | otherwise         = old_e
+    VarApp v e       | v == overloadName -> overload_scope names codeFnName e
+    DollarVarApp v e | v == overloadName -> overload_scope names codeFnName e
+    _                                    -> old_e
 
 -- Now perform the overriding just on the expression in this scope.
 overload_scope :: Names GHC.Name -> GHC.Name -> Expr.LHsExpr GHC.GhcRn
                                                  -> Expr.LHsExpr GHC.GhcRn
 overload_scope names codeFnName e =
     let mkVar = GHC.noLoc . Expr.HsVar noExt  . GHC.noLoc
-        namesExpr = fmap (\n -> ExprWithName n (mkVar n)) names
-        pureExpr = ExprWithName codeFnName (mkVar codeFnName)
-    in everywhereBut (mkQ False (check_code pureExpr)) (mkT (overloadExpr namesExpr)) e
-
-data ExprWithName = ExprWithName { ename :: GHC.Name, mkExpr :: (Expr.LHsExpr GHC.GhcRn) }
+        namesExpr = fmap mkVar names
+    in everywhereBut (mkQ False (check_code codeFnName)) (mkT (overloadExpr namesExpr)) e
 
 -- Don't recurse into LiftPlugin code
-check_code :: ExprWithName -> Expr.LHsExpr GHC.GhcRn -> Bool
-check_code codeFnName (GHC.L _ e) = go e
-  where
-    go (Expr.HsApp _exp (GHC.L _ (Expr.HsVar _ name)) _)
-      | GHC.unLoc name == ename codeFnName = True
-    go _ = False
+check_code :: GHC.Name -> Expr.LHsExpr GHC.GhcRn -> Bool
+check_code codeFnName (GHC.L _ (Expr.HsApp _exp (GHC.L _ (Expr.HsVar _ name)) _)) = GHC.unLoc name == codeFnName
+check_code _          _                                                           = False
 
-overloadExpr :: Names ExprWithName -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
+overloadExpr :: Names (Expr.LHsExpr GHC.GhcRn) -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
 overloadExpr names@Names{..} le@(GHC.L l e) = go e
   where
-    go (Expr.HsIf _ext _ p te fe) = foldl' GHC.mkHsApp (mkExpr ifName) [p, te, fe]
-    go (Expr.HsApp _exp e1 e2) = foldl' GHC.mkHsApp (mkExpr apName) [e1, e2]
-    go (Expr.HsLam {}) = GHC.mkHsApp (mkExpr lamName) le
+    go (Expr.HsIf _ext _ p te fe) = foldl' GHC.mkHsApp ifName [p, te, fe]
+    go (Expr.HsApp _exp e1 e2) = foldl' GHC.mkHsApp apName [e1, e2]
+    go (Expr.HsLam {}) = GHC.mkHsApp lamName le
     go (Expr.HsLet _ binds let_rhs) =
       let (binder, rhs) = extractBindInfo names binds
           pats = [GHC.noLoc $ GHC.VarPat noExt  binder]
           body_lam = mkHsLam pats let_rhs
-      in foldl' GHC.mkHsApp (mkExpr letName) [rhs, body_lam]
+      in foldl' GHC.mkHsApp letName [rhs, body_lam]
 
     go (Expr.HsCase _ext scrut mg) =
       let res = caseDataCon names scrut mg
@@ -196,7 +184,7 @@ mkGRHSMatch pats rhs = GHC.noLoc $ GHC.Match noExt  GHC.LambdaExpr pats rhs
 {- Code for dealing with let -}
 
 -- Get the binder and body of let
-extractBindInfo :: Names ExprWithName -> GHC.LHsLocalBinds GHC.GhcRn -> (GHC.Located GHC.Name, GHC.LHsExpr GHC.GhcRn)
+extractBindInfo :: Names (Expr.LHsExpr GHC.GhcRn) -> GHC.LHsLocalBinds GHC.GhcRn -> (GHC.Located GHC.Name, GHC.LHsExpr GHC.GhcRn)
 extractBindInfo names (GHC.L _ (GHC.HsValBinds _ (GHC.XValBindsLR (GHC.NValBinds binds _)))) = getBinds binds
   where
     getBinds bs =
@@ -233,7 +221,7 @@ isSimpleMatchGroup (Expr.XMatchGroup _) = panic "unhandled"
 
 {- Code for dealing with case -}
 -- Look at a case and see if it's a simple match on a data con
-caseDataCon :: Names ExprWithName
+caseDataCon :: Names (Expr.LHsExpr GHC.GhcRn)
             -> Expr.LHsExpr (GHC.GhcRn)
             -> Expr.MatchGroup (GHC.GhcRn) (Expr.LHsExpr (GHC.GhcRn))
             -> Either String (GHC.LHsExpr GHC.GhcRn)
@@ -246,7 +234,7 @@ caseDataCon names scrut (Expr.MG { mg_alts = (GHC.L _l alts) }) = do
       case GHC.lookupNameEnv caseTable n of
         Nothing -> Left "Not able to overload this constructor"
         Just (CaseRow sel spec) ->
-          let con = GHC.mkHsApp (mkExpr (sel names)) scrut
+          let con = GHC.mkHsApp (sel names) scrut
           in checkAndBuild con ps spec
 caseDataCon _ _ (Expr.XMatchGroup _) = panic "unhandled"
 

@@ -11,6 +11,7 @@ import Outputable
 import qualified GhcPlugins as GHC
 import qualified IfaceEnv as GHC (lookupOrig)
 import Finder (findImportedModule, FindResult(Found))
+import FastString (mkFastString)
 import Module (Module, mkModuleName)
 import Name (Name)
 import Control.Monad.IO.Class ( liftIO )
@@ -45,4 +46,9 @@ lookupId pm name = lookupName pm name >>= GHC.lookupId
 lookupModule :: GHC.HscEnv -> String -> TcM Module
 lookupModule hscEnv modName = do
   Found _ md <- liftIO (findImportedModule hscEnv (mkModuleName ("Parsley." ++ modName)) Nothing)
+  return md
+
+lookupModuleInPackage :: GHC.HscEnv -> String -> String -> TcM Module
+lookupModuleInPackage hscEnv package modName = do
+  Found _ md <- liftIO (findImportedModule hscEnv (mkModuleName modName) (Just (mkFastString package)))
   return md

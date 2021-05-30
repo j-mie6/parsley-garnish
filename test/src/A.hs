@@ -3,6 +3,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fplugin=Parsley.LiftPlugin #-}
 {-# OPTIONS_GHC -fplugin=Parsley.OverloadedSyntaxPlugin #-}
+{-# OPTIONS_GHC -fplugin=Parsley.OverloadedQuotesPlugin #-}
 module A where
 
 import Data.Functor.Identity
