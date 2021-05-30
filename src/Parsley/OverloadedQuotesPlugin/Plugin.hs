@@ -10,7 +10,7 @@ import TcRnTypes     (TcGblEnv, TcM)
 import Data.Generics (mkT, everywhere)
 import GHC.Generics  (Generic)
 
-import qualified GHC               (HsGroup, GhcRn, Name)
+import qualified GHC               (HsGroup, GhcRn, Name, GenLocated(L))
 import qualified GhcPlugins as GHC (CommandLineOption)
 import qualified TcRnMonad as GHC  (getTopEnv)
 
@@ -58,4 +58,6 @@ overloadedQuotes _ gEnv rn = do
 -- As `transform` works bottom up, we can always assume nested quotes are already handled: this might
 -- get tricky, however.
 transformUTHQuote :: QOps GHC.Name -> Expr.LHsExpr GHC.GhcRn -> Expr.LHsExpr GHC.GhcRn
-transformUTHQuote _ e = e
+transformUTHQuote _ (GHC.L s (Expr.HsRnBracketOut ex (Expr.ExpBr ex' x) _)) = pprTouch "new quote" $ GHC.L s (Expr.HsBracket ex (Expr.TExpBr ex' x))
+transformUTHQuote _ (GHC.L s (Expr.HsSpliceE ex (Expr.HsUntypedSplice ex' d x y))) =  pprTouch "new splice" $ GHC.L s (Expr.HsSpliceE ex (Expr.HsTypedSplice ex' d x y))
+transformUTHQuote _ x = x
