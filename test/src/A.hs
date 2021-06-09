@@ -10,6 +10,9 @@ import Data.Functor.Identity
 
 import Parsley.Garnish
 
+liftTest :: Int -> Code Int
+liftTest x = [|x|]
+
 test :: Code Int
 test = [|$(id [|7|]) + 1 |]
 
