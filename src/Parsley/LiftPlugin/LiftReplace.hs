@@ -51,7 +51,7 @@ codeNameString = "code"
 replaceLiftDicts :: [GHC.CommandLineOption] -> GHC.ModSummary -> TcGblEnv -> TcM TcGblEnv
 replaceLiftDicts _opts _sum tc_env = do
   hscEnv <- GHC.getTopEnv
-  pluginModule <- lookupModule hscEnv "LiftPlugin"
+  pluginModule <- lookupModule hscEnv "Parsley.LiftPlugin"
 
   -- This is the identifier we want to give some magic behaviour
   codeFnName <- lookupId pluginModule codeNameString

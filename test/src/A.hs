@@ -10,11 +10,14 @@ import Data.Functor.Identity
 
 import Parsley.Garnish
 
-liftTest :: Int -> Code Int
+liftTest :: Int -> WQ Int
 liftTest x = [|x|]
 
-test :: Code Int
-test = [|$(id [|7|]) + 1 |]
+id' :: WQ a -> WQ a
+id' = id
+
+test :: WQ Int
+test = [|$(id' [|7|]) + 1 |]
 
 instance LiftTo Identity where
   code = Identity
