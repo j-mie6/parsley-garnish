@@ -100,8 +100,8 @@ plugin = defaultPlugin { renamedResultAction = overloadedSyntax, pluginRecompile
 overloadedSyntax :: [GHC.CommandLineOption] -> TcGblEnv -> GHC.HsGroup GHC.GhcRn -> TcM (TcGblEnv, GHC.HsGroup GHC.GhcRn)
 overloadedSyntax _opts tc_gbl_env rn_group = do
   hscEnv <- GHC.getTopEnv
-  pluginModule <- lookupModule hscEnv "OverloadedSyntaxPlugin"
-  liftPluginModule <- lookupModule hscEnv "LiftPlugin"
+  pluginModule <- lookupModule hscEnv "Parsley.OverloadedSyntaxPlugin"
+  liftPluginModule <- lookupModule hscEnv "Parsley.LiftPlugin"
   namesName <- lookupNames pluginModule namesString
   codeFnName <- lookupName liftPluginModule LiftPlugin.codeNameString
 

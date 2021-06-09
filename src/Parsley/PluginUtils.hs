@@ -45,7 +45,7 @@ lookupId pm name = lookupName pm name >>= GHC.lookupId
 
 lookupModule :: GHC.HscEnv -> String -> TcM Module
 lookupModule hscEnv modName = do
-  Found _ md <- liftIO (findImportedModule hscEnv (mkModuleName ("Parsley." ++ modName)) Nothing)
+  Found _ md <- liftIO (findImportedModule hscEnv (mkModuleName modName) Nothing)
   return md
 
 lookupModuleInPackage :: GHC.HscEnv -> String -> String -> TcM Module
