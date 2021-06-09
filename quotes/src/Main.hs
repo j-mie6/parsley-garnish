@@ -2,11 +2,6 @@
 import Data.Generics hiding (Generic)
 import GHC.Generics
 import Debug.Trace (trace, traceShow)
-import Control.Monad.State
-import Control.Monad.Reader
-import Data.Map (Map)
-
-import qualified Data.Map as Map
 
 type Var = String
 data Lit = Int Int | Char Char deriving (Generic, Data)
@@ -64,31 +59,27 @@ prog = Top [
     Fun "baz" [] $ UQu (Lam "x" (USp (App (App (Var "foo") (UQu (Var "succ"))) (UQu (Var "x")))))
   ]
 
-type StageCheck a = ReaderT (Bool, Int) (State (Map Var Int)) a
-
-inQuote :: StageCheck Bool
-inQuote = asks fst
-
-level :: StageCheck Int
-level = asks snd
-
-withinQuote :: StageCheck a -> StageCheck a
-withinQuote = local (\(_, l) -> (True, l + 1))
-
-withinSplice :: StageCheck a -> StageCheck a
-withinSplice = local (\(b, l) -> (b, l - 1))
-
-declare :: Var -> StageCheck ()
-declare v = do
-  n <- level
-  modify (Map.insert v n)
-
-wellStaged :: Var -> StageCheck Bool
-wellStaged v = gets (maybe True (> 0) . Map.lookup v)
-
 transformUQuote :: Exp -> Exp
-transformUQuote q@(UQu x) = trace ("quote to process: " ++ show q ++ "\nlocal bindings: " ++ show (findBindings x)) q
+transformUQuote q@(UQu x) = trace ("quote to process: " ++ show q ++ "\nlocal bindings: " ++ show (findBindings x)) $
+  makeQ (everywhere (mkT transformUQuoteVar) x) (TQu (everywhere (mkT transformUQuoteCode) x))
 transformUQuote x         = x
+
+-- So far we have the top level quote, along with the bindings found within
+-- we need to process the quotes inside. In fact, we should take the expression and
+-- process it twice, once assuming _code and the other assuming _var. Maybe then the
+-- bindings aren't important as everything is treated equally?
+
+-- It will be important to rename the captured bindings when the expression is duplicated
+
+transformUQuoteVar :: Exp -> Exp
+transformUQuoteVar (UQu x) = makeVal x
+transformUQuoteVar (USp x) = _val x
+transformUQuoteVar x       = x
+
+transformUQuoteCode :: Exp -> Exp
+transformUQuoteCode (UQu x) = makeCode x
+transformUQuoteCode (USp x) = TSp (_code x)
+transformUQuoteCode x       = x
 
 -- find all the bindings within a quote
 findBindings :: Exp -> [Var]
@@ -103,7 +94,7 @@ collect :: Typeable a => (a -> Maybe r) -> GenericQ [r]
 collect f = everything (++) ([] `mkQ` (maybe [] pure . f))
 
 applyPlugin :: Top -> Top
-applyPlugin p = {-evalState (runReaderT (-}everywhere' (mkT transformUQuote) p{-}) (False, 0)) Map.empty-}
+applyPlugin p = everywhere' (mkT transformUQuote) p
 
 main :: IO ()
 main = do
