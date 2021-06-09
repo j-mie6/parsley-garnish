@@ -21,7 +21,7 @@ import qualified HsExpr as Expr
 import qualified GHC.Hs.Expr as Expr
 #endif
 
-import Parsley.PluginUtils (lookupModuleInPackage, lookupModule, lookupName, lookupNames, pprTouch)
+import Parsley.PluginUtils (lookupModuleInPackage, lookupName, lookupNames)
 
 #if __GLASGOW_HASKELL__ >= 810
 import GHC.Hs.Extension
@@ -61,7 +61,6 @@ overloadedQuotes _ gEnv rn = do
   qops <- lookupNames parsley quapplicativeStrings
   prelude <- lookupModuleInPackage hscEnv "base" "GHC.Err"
   undef <- lookupName prelude "undefined"
-  pprTouch "names" [makeQ qops, _code qops, _val qops] `seq` return ()
   return (gEnv, everywhere' (mkT (transformUTHQuote qops undef)) rn)
 
 mkApp :: GHC.SrcSpan -> Expr -> Expr -> Expr
@@ -81,7 +80,7 @@ mkPar s = GHC.L s . Expr.HsPar noExt
 -- As `transform` works bottom up, we can always assume nested quotes are already handled: this might
 -- get tricky, however.
 transformUTHQuote :: QOps GHC.Name -> GHC.Name -> Expr -> Expr
-transformUTHQuote ops undef (GHC.L s (Expr.HsRnBracketOut ex (Expr.ExpBr ex' x) _)) = pprTouch "new quote" $ 
+transformUTHQuote ops undef (GHC.L s (Expr.HsRnBracketOut ex (Expr.ExpBr ex' x) _)) = --pprTouch "new quote" $ 
   mkPar s (makeQS `mkAppS` everywhere (mkT (transformUTHQuoteVar (_val ops) makeVal)) x 
                   `mkAppS` mkQuote (everywhere (mkT (transformUTHQuoteCode (_code ops) makeCode)) x))
   where
@@ -90,9 +89,6 @@ transformUTHQuote ops undef (GHC.L s (Expr.HsRnBracketOut ex (Expr.ExpBr ex' x) 
     makeQS = mkVar s (makeQ ops)
     makeVal y = mkPar s (makeQS `mkAppS` y `mkAppS` mkVar s undef)
     makeCode y = mkPar s (makeQS `mkAppS` mkVar s undef `mkAppS` y)
-
-  --GHC.L s (Expr.HsBracket ex (Expr.TExpBr ex' x))
---transformUTHQuote _ _ (GHC.L s (Expr.HsSpliceE ex (Expr.HsUntypedSplice ex' d x y))) =  pprTouch "new splice" $ GHC.L s (Expr.HsSpliceE ex (Expr.HsTypedSplice ex' d x y))
 transformUTHQuote _ _ x = x
 
 transformUTHQuoteVar :: GHC.Name -> (Expr -> Expr) -> Expr -> Expr
@@ -105,30 +101,3 @@ transformUTHQuoteCode _     makeCode (GHC.L s (Expr.HsRnBracketOut ex (Expr.ExpB
 transformUTHQuoteCode _code _        (GHC.L s (Expr.HsSpliceE ex (Expr.HsUntypedSplice ex' d name x))) = GHC.L s . Expr.HsSpliceE ex . Expr.HsTypedSplice ex' d name $
   mkApp s (mkVar s _code) x
 transformUTHQuoteCode _     _        x                                                                 = x
-
-{-
-
-transformUQuote :: Exp -> Exp
-transformUQuote q@(UQu x) = trace ("quote to process: " ++ show q ++ "\nlocal bindings: " ++ show (findBindings x)) $
-  makeQ (everywhere (mkT transformUQuoteVar) x) (TQu (everywhere (mkT transformUQuoteCode) x))
-transformUQuote x         = x
-
--- So far we have the top level quote, along with the bindings found within
--- we need to process the quotes inside. In fact, we should take the expression and
--- process it twice, once assuming _code and the other assuming _var. Maybe then the
--- bindings aren't important as everything is treated equally?
-
--- It will be important to rename the captured bindings when the expression is duplicated
-
-transformUQuoteVar :: Exp -> Exp
-transformUQuoteVar (UQu x) = makeVal x
-transformUQuoteVar (USp x) = _val x
-transformUQuoteVar x       = x
-
-transformUQuoteCode :: Exp -> Exp
-transformUQuoteCode (UQu x) = makeCode x
-transformUQuoteCode (USp x) = TSp (_code x)
-transformUQuoteCode x       = x
-
-
--}
