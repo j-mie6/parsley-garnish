@@ -38,7 +38,7 @@ type Expr = Expr.LHsExpr GHC.GhcRn
 
 {-|
 This plugin repurposes /Untyped/ Template Haskell quotes (and splices within them)
-to be @Parsley.Quapplicative@ values.
+to be `Parsley.Quapplicative` values.
 -}
 plugin :: Plugin
 plugin = defaultPlugin { renamedResultAction = overloadedQuotes, pluginRecompile = purePlugin }

@@ -19,7 +19,7 @@ will transform every UTH quote in a file so that it represents a value of
 > -- goes to:
 > qsucc qx = makeQ (_val qx + 1) [||$$(_code qx) + 1||]
 
-Values of @Parsley.Defunctionalized.Defunc@ can also be spliced in directly:
+Values of `Parsley.Defunctionalized.Defunc` can also be spliced in directly:
 
 > diffcons :: Defunc a -> Defunc ([a] -> [a]) -> Defunc ([a] -> [a])
 > diffcons qx qdxs = [| $(COMPOSE) ($(CONS) $(qx)) $(qdxs) |]
