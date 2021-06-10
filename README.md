@@ -49,3 +49,39 @@ diffcons' = [|\x dxs -> $(diffcons [|x|] [|dxs|])|]
 The disadvantage to this plugin _currently_ is that it does not make any 
 attempt to  leverage the specialised parts of `Defunc` to improve the code 
 generation and inspectibility. The user would be left to use this manually.
+
+## `LiftPlugin`: [Originally](https://github.com/mpickering/lift-plugin) by *mpickering* (Matthew Pickering)
+Automatically lift functions and values using `code`, built as a 
+Typechecker Plugin. This is a more lightweight and less invasive plugin
+compared with `OverloadedQuotes`. It transforms uses of 
+`Parsley.LiftPlugin.code` into `makeQ` calls, allowing the lifting of 
+functions and values. The caveat is that it will only work for single 
+terms, not function applications, or composite expressions.
+
+```hs
+qsucc :: LiftTo q => q (Int -> Int)
+qsucc = code succ
+-- goes to
+qsucc = makeQ succ [||succ||]
+```
+
+This plugin is preferable to `OverloadedQuotes` when UTH is needed. It may
+also be slightly more efficient as it replaces `Lift` dictionaries as 
+opposed to a syntax transformation.
+
+## `OverloadedSyntaxPlugin`: [Originally](https://github.com/mpickering/lift-plugin) by *mpickering* (Matthew Pickering)
+By using `overload`, functions can be written to be injected into `WQ` or 
+`Defunc` using regular Haskell syntax. This is limited to certain 
+constructions. The supported syntax is:
+
+* `if then else`
+* `let`
+* lambdas
+* function application
+* pattern matching on `(:)`
+* pattern matching on `(,)`
+
+This is a more restricted form of plugin from `OverloadedQuotes` but it
+does allow for the use of UTH quotes in the program. It is also capable
+of making use of the specialised `Defunc` forms when appropriate, which
+improves the inspectibility of code in the `parsley` engine.

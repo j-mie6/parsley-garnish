@@ -7,9 +7,7 @@ homepage:           https://github.com/j-mie6/parsley-garnish
 bug-reports:        https://github.com/j-mie6/parsley-garnish/issues             
 license:            BSD3
 license-file:       LICENSE
-author:             Jamie Willis, Garnish Contributors
--- When the lift-plugin + overloaded-syntax is in this can change
---, Matthew Pickering
+author:             Jamie Willis, Matthew Pickering, Garnish Contributors
 maintainer:         Jamie Willis <j.willis19@imperial.ac.uk>
 category:           Plugin
 build-type:         Simple
@@ -19,19 +17,19 @@ cabal-version:      1.18
 
 library
   exposed-modules:  
---                    Parsley.Garnish,
---                    Parsley.LiftPlugin
---                    Parsley.OverloadedSyntaxPlugin
+                    Parsley.Garnish,
+                    Parsley.LiftPlugin
+                    Parsley.OverloadedSyntaxPlugin
                     Parsley.OverloadedQuotesPlugin
   other-modules:    Parsley.PluginUtils
 --                    -- Lift Plugin
---                    Parsley.LiftPlugin.Plugin
---                    Parsley.LiftPlugin.Error
---                    Parsley.LiftPlugin.Fake
---                    Parsley.LiftPlugin.LiftReplace
---                    Parsley.LiftPlugin.LiftFind
+                    Parsley.LiftPlugin.Plugin
+                    Parsley.LiftPlugin.Error
+                    Parsley.LiftPlugin.Fake
+                    Parsley.LiftPlugin.LiftReplace
+                    Parsley.LiftPlugin.LiftFind
                     -- Overloaded Syntax Plugin
---                    Parsley.OverloadedSyntaxPlugin.Plugin
+                    Parsley.OverloadedSyntaxPlugin.Plugin
                     -- Overloaded Quotes Plugin
                     Parsley.OverloadedQuotesPlugin.Plugin
 
