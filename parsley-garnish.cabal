@@ -39,7 +39,7 @@ library
                     parsley             >= 0.1     && < 0.2,
                     template-haskell    >= 2.14    && < 3,
                     ghc-tcplugins-extra >= 0.3     && < 0.5,
-                    ghc                 >= 8.6     && < 9,
+                    ghc                 >= 8.6     && < 9.2,
                     syb                 >= 0.7     && < 0.8
 
   hs-source-dirs:   src
