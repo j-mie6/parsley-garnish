@@ -9,22 +9,34 @@
 {-# LANGUAGE RankNTypes #-}
 module Parsley.OverloadedQuotesPlugin.Plugin (plugin) where
 
-import Plugins       (Plugin (..), defaultPlugin, purePlugin)
-import TcRnTypes     (TcGblEnv, TcM)
 import Data.Generics (GenericT, GenericQ, mkT, mkQ, everywhere, gmapT)
 import GHC.Generics  (Generic)
+
+import Parsley.PluginUtils (lookupModuleInPackage, lookupName, lookupNames)
+
+#if __GLASGOW_HASKELL__ >= 900
+import GHC.Driver.Plugins       (Plugin (..), defaultPlugin, purePlugin)
+import GHC.Tc.Types             (TcM, TcGblEnv)
+
+
+import qualified GHC               (HsGroup, GhcRn, Name, GenLocated(L), SrcSpan)
+import qualified GHC.Plugins as GHC (CommandLineOption)
+import qualified GHC.Tc.Utils.Monad as GHC  (getTopEnv)
+#else
+import Plugins       (Plugin (..), defaultPlugin, purePlugin)
+import TcRnTypes     (TcGblEnv, TcM)
+
 
 import qualified GHC               (HsGroup, GhcRn, Name, GenLocated(L), SrcSpan)
 import qualified GhcPlugins as GHC (CommandLineOption)
 import qualified TcRnMonad as GHC  (getTopEnv)
+#endif
 
 #if __GLASGOW_HASKELL__ < 810
 import qualified HsExpr as Expr
 #else
 import qualified GHC.Hs.Expr as Expr
 #endif
-
-import Parsley.PluginUtils (lookupModuleInPackage, lookupName, lookupNames)
 
 #if __GLASGOW_HASKELL__ >= 810
 import GHC.Hs.Extension

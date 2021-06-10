@@ -1,19 +1,30 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, CPP #-}
 module Parsley.PluginUtils where
 
 import qualified GHC.TcPluginM.Extra as TCPluginExtra (lookupName)
 
--- GHC API
+-- ghc
+#if __GLASGOW_HASKELL__ >= 900
+import GHC.Tc.Types (TcM, TcPluginM)
+import GHC.Utils.Outputable
+import qualified GHC.Plugins as GHC
+import qualified GHC.Iface.Env as GHC (lookupOrig)
+import GHC.Driver.Finder (findImportedModule, FindResult(Found))
+import GHC.Data.FastString (mkFastString)
+import GHC.Unit.Module (Module)
+import GHC.Unit.Module.Name (mkModuleName)
+import GHC (Name)
+#else
 import TcRnTypes (TcM, TcPluginM)
 import Outputable
-
--- ghc
 import qualified GhcPlugins as GHC
 import qualified IfaceEnv as GHC (lookupOrig)
 import Finder (findImportedModule, FindResult(Found))
 import FastString (mkFastString)
 import Module (Module, mkModuleName)
 import Name (Name)
+#endif
+
 import Control.Monad.IO.Class ( liftIO )
 
 class Monad m => Lookup m where
