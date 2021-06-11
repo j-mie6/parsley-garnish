@@ -1,5 +1,5 @@
 name:               parsley-garnish
-version:            0.1.0.0
+version:            0.1.0.1
 synopsis:           A collection of GHC plugins to work with parsley
 description:        This package contains a collection (for now one) to help
                     remove boilerplate when writing parsers using @parsley@.
