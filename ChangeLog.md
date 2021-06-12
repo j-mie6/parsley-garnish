@@ -8,7 +8,7 @@
 
 * Support for GHC 9.0 in place.
 
-## 0.1.1.0 -- 2021-06-12
+## 1.0.0.0 -- 2021-06-12
 
 * Switched to support `parsley-core` as the base
 * Introduced the `Parsley.Internal.Bridge` module to provide functions for the plugin to latch onto
