@@ -41,7 +41,7 @@ library
                     Parsley.OverloadedQuotesPlugin.Plugin
 
   build-depends:    base                >= 4.10    && < 5,
-                    parsley-core        >= 1.0     && < 1.1,
+                    parsley-core        >= 1       && < 2,
                     template-haskell    >= 2.14    && < 3,
                     ghc-tcplugins-extra >= 0.3     && < 0.5,
                     ghc                 >= 8.6     && < 9.2,
