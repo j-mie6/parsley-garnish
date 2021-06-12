@@ -1,5 +1,5 @@
 name:               parsley-garnish
-version:            0.1.0.1
+version:            0.1.1.0
 synopsis:           A collection of GHC plugins to work with parsley
 description:        This package contains a collection (for now one) to help
                     remove boilerplate when writing parsers using @parsley@.
@@ -27,6 +27,7 @@ library
 --                    Parsley.LiftPlugin
 --                    Parsley.OverloadedSyntaxPlugin
                     Parsley.OverloadedQuotesPlugin
+                    Parsley.Internal.Bridge
   other-modules:    Parsley.PluginUtils
 --                    -- Lift Plugin
 --                    Parsley.LiftPlugin.Plugin
@@ -40,7 +41,7 @@ library
                     Parsley.OverloadedQuotesPlugin.Plugin
 
   build-depends:    base                >= 4.10    && < 5,
-                    parsley             >= 0.1     && < 0.2,
+                    parsley-core        >= 1.0     && < 1.1,
                     template-haskell    >= 2.14    && < 3,
                     ghc-tcplugins-extra >= 0.3     && < 0.5,
                     ghc                 >= 8.6     && < 9.2,

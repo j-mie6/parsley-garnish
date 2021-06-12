@@ -1,14 +1,15 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -fplugin=Parsley.LiftPlugin #-}
-{-# OPTIONS_GHC -fplugin=Parsley.OverloadedSyntaxPlugin #-}
+--{-# OPTIONS_GHC -fplugin=Parsley.LiftPlugin #-}
+--{-# OPTIONS_GHC -fplugin=Parsley.OverloadedSyntaxPlugin #-}
 {-# OPTIONS_GHC -fplugin=Parsley.OverloadedQuotesPlugin #-}
 module A where
 
 import Data.Functor.Identity
 
-import Parsley.Garnish
+import Parsley.Internal
+--import Parsley.Garnish
 
 liftTest :: Int -> WQ Int
 liftTest x = [|x|]
@@ -19,6 +20,7 @@ id' = id
 test :: WQ Int
 test = [|$(id' [|7|]) + 1 |]
 
+{-
 instance LiftTo Identity where
   code = Identity
 
@@ -133,4 +135,4 @@ staticPowerId = overload (\n -> \k ->
 staticPower_s :: (Quapplicative r, Syntax r) => Int -> r Int -> r Int
 staticPower_s n k = if n == 0
                       then code 1
-                      else (overload ((code (*)) k)) >*< staticPower_s (n - 1) k
+                      else (overload ((code (*)) k)) >*< staticPower_s (n - 1) k-}

@@ -12,15 +12,10 @@ import Parsley.LiftPlugin (LiftTo(..))
 import Parsley.OverloadedSyntaxPlugin (Syntax(..), overload)
 import Parsley (Quapplicative(makeQ, _val, _code, (>*<)), WQ, Code)
 import Parsley.Defunctionalized (Defunc)
+import Parsley.Internal.Bridge (mkCode, mkVal)
 
 instance LiftTo WQ where code x = makeQ x [||x||]
 instance LiftTo Defunc where code x = makeQ x [||x||]
-
-mkVal :: Quapplicative q => a -> q a
-mkVal x = makeQ x undefined
-
-mkCode :: Quapplicative q => Code a -> q a
-mkCode qx = makeQ undefined qx
 
 instance (LiftTo q, Quapplicative q) => Syntax q where
   _if cond _then _else = makeQ
