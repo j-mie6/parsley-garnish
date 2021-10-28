@@ -4,7 +4,7 @@ synopsis:           A collection of GHC plugins to work with parsley
 description:        This package contains a collection (for now one) to help
                     remove boilerplate when writing parsers using @parsley@.
 homepage:           https://github.com/j-mie6/parsley-garnish
-bug-reports:        https://github.com/j-mie6/parsley-garnish/issues             
+bug-reports:        https://github.com/j-mie6/parsley-garnish/issues
 license:            BSD3
 license-file:       LICENSE
 author:             Jamie Willis, Garnish Contributors
@@ -22,7 +22,7 @@ tested-with:        GHC == 8.6.5,
                     GHC == 9.0.1
 
 library
-  exposed-modules:  
+  exposed-modules:
 --                    Parsley.Garnish,
 --                    Parsley.LiftPlugin
 --                    Parsley.OverloadedSyntaxPlugin
@@ -41,7 +41,7 @@ library
                     Parsley.OverloadedQuotesPlugin.Plugin
 
   build-depends:    base                >= 4.10    && < 5,
-                    parsley-core        >= 1       && < 2,
+                    parsley-core        >= 1       && < 3,
                     template-haskell    >= 2.14    && < 3,
                     ghc-tcplugins-extra >= 0.3     && < 0.5,
                     ghc                 >= 8.6     && < 9.2,
