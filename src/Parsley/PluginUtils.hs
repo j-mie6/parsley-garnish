@@ -9,7 +9,11 @@ import GHC.Tc.Types (TcM, TcPluginM)
 import GHC.Utils.Outputable
 import qualified GHC.Plugins as GHC
 import qualified GHC.Iface.Env as GHC (lookupOrig)
+#if __GLASGOW_HASKELL__ == 900
 import GHC.Driver.Finder (findImportedModule, FindResult(Found))
+#else
+import GHC.Unit.Finder (findImportedModule, FindResult(Found))
+#endif
 import GHC.Data.FastString (mkFastString)
 import GHC.Unit.Module (Module)
 import GHC.Unit.Module.Name (mkModuleName)
@@ -23,6 +27,11 @@ import Finder (findImportedModule, FindResult(Found))
 import FastString (mkFastString)
 import Module (Module, mkModuleName)
 import Name (Name)
+#endif
+
+#if __GLASGOW_HASKELL__ > 900
+import qualified GHC.Types.TyThing as GHC
+import GHC.Plugins (pprTrace)
 #endif
 
 import Control.Monad.IO.Class ( liftIO )

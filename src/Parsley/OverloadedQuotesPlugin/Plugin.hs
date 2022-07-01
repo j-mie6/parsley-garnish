@@ -39,7 +39,11 @@ import qualified GHC.Hs.Expr as Expr
 #endif
 
 #if __GLASGOW_HASKELL__ >= 810
+#if __GLASGOW_HASKELL__ > 900
+import GHC.Hs
+#else
 import GHC.Hs.Extension
+#endif
 noExt :: NoExtField
 noExt = noExtField
 #else
@@ -82,13 +86,13 @@ overloadedQuotes _ gEnv rn = do
   -- of this whenever it fires
   return (gEnv, onlyTopmost (mkQ False isQuote) (mkT (transformUTHQuote qops)) rn)
 
-mkApp :: GHC.SrcSpan -> Expr -> Expr -> Expr
+--mkApp :: GHC.SrcSpan -> Expr -> Expr -> Expr
 mkApp s f = GHC.L s . Expr.HsApp noExt f . mkPar s
 
-mkVar :: GHC.SrcSpan -> GHC.Name -> Expr
+--mkVar :: GHC.SrcSpan -> GHC.Name -> Expr
 mkVar s = GHC.L s . Expr.HsVar noExt . GHC.L s
 
-mkPar :: GHC.SrcSpan -> Expr -> Expr
+--mkPar :: GHC.SrcSpan -> Expr -> Expr
 mkPar s = GHC.L s . Expr.HsPar noExt
 
 pattern LUTHQuote s ex1 ex2 x <- GHC.L s (Expr.HsRnBracketOut ex1 (Expr.ExpBr ex2 x) _)
@@ -97,6 +101,13 @@ pattern LUTHSplice s ex1 ex2 dec name x = GHC.L s (Expr.HsSpliceE ex1 (Expr.HsUn
 isQuote :: Expr -> Bool
 isQuote (LUTHQuote _ _ _ _) = True
 isQuote _                   = False
+
+-- FIXME: On GHC 9.2, the src spans have been annotated with constructor specific information;
+--        this means that a source span cannot be freely handed over to another type of constructor.
+--        As a result, we can't do the generic lookup on GHC.Name, we have to do so for the types that
+--        /have/ names: this way, the original source span information can be repackaged up with the
+--        name, which is actually more ideal, but also means more work to support all cases, including
+--        for /each/ of GHCs 8.6, 8.8, 8.10, 9.0, and 9.2. Basically, this mostly needs a rewrite...
 
 -- The goal here is to find [|e|] and turn it into makeQ e [||e||]
 -- The catch is that for any $qe in the quote, it must be hoisted out, let bound and then re-incorporated
